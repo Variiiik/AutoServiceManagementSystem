@@ -1,5 +1,5 @@
-# Multi-stage build for production
-FROM node:18-alpine as builder
+# Multi-stage build for production - Frontend
+FROM node:18-alpine as frontend-builder
 
 WORKDIR /app
 
@@ -15,17 +15,41 @@ COPY . .
 # Build the application
 RUN npm run build
 
+# Backend build stage
+FROM node:18-alpine as backend-builder
+
+WORKDIR /app/server
+
+# Copy server package files
+COPY server/package*.json ./
+
+# Install server dependencies
+RUN npm ci --only=production
+
+# Copy server source code
+COPY server/ .
+
 # Production stage
-FROM nginx:alpine
+FROM node:18-alpine
 
-# Copy built assets from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Install nginx for serving frontend
+RUN apk add --no-cache nginx
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy built frontend assets
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
 
-# Expose port 80
-EXPOSE 80
+# Copy backend
+COPY --from=backend-builder /app/server /app/server
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Copy nginx configuration for frontend
+COPY nginx.conf /etc/nginx/http.d/default.conf
+
+# Create startup script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Expose ports
+EXPOSE 80 5000
+
+# Start both services
+CMD ["/docker-entrypoint.sh"]

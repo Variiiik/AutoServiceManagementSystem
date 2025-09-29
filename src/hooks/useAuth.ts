@@ -1,97 +1,107 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { UserProfile } from '../types';
+import { useState, useEffect, createContext, useContext } from 'react';
+import { authAPI } from '../lib/api';
 
-export function useAuth() {
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+interface User {
+  id: number;
+  email: string;
+  fullName: string;
+  role: 'admin' | 'mechanic';
+  phone?: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (email: string, password: string, fullName: string, role: 'admin' | 'mechanic', phone?: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+export const useAuthProvider = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
+    const initAuth = async () => {
+      const token = localStorage.getItem('auth_token');
+      const userData = localStorage.getItem('user_data');
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
-        setLoading(false);
+      if (token && userData) {
+        try {
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+          
+          // Verify token is still valid
+          await authAPI.getCurrentUser();
+        } catch (error) {
+          console.error('Token validation failed:', error);
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_data');
+          setUser(null);
+        }
       }
-    });
+      
+      setLoading(false);
+    };
 
-    return () => subscription.unsubscribe();
+    initAuth();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const login = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const response = await authAPI.login(email, password);
+      const { token, user: userData } = response.data;
 
-      if (error) throw error;
-      setProfile(data);
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-    } finally {
-      setLoading(false);
+      localStorage.setItem('auth_token', token);
+      localStorage.setItem('user_data', JSON.stringify(userData));
+      setUser(userData);
+
+      return { success: true };
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Login failed';
+      return { success: false, error: errorMessage };
     }
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
-  };
+  const register = async (email: string, password: string, fullName: string, role: 'admin' | 'mechanic', phone?: string) => {
+    try {
+      const response = await authAPI.register(email, password, fullName, role, phone);
+      const { token, user: userData } = response.data;
 
-  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'mechanic') => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+      localStorage.setItem('auth_token', token);
+      localStorage.setItem('user_data', JSON.stringify(userData));
+      setUser(userData);
 
-    if (data.user && !error) {
-      // Create profile
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert({
-          id: data.user.id,
-          full_name: fullName,
-          role,
-        });
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
-      }
+      return { success: true };
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Registration failed';
+      return { success: false, error: errorMessage };
     }
-
-    return { data, error };
   };
 
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+  const logout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_data');
+    setUser(null);
   };
 
   return {
     user,
-    profile,
     loading,
-    signIn,
-    signUp,
-    signOut,
+    login,
+    register,
+    logout,
   };
-}
+};
+
+export { AuthContext };

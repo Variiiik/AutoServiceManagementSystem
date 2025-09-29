@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from './hooks/useAuth';
+import { AuthContext, useAuthProvider } from './hooks/useAuth';
 import { Auth } from './components/Auth';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -11,10 +11,10 @@ import { Appointments } from './components/Appointments';
 import { Billing } from './components/Billing';
 
 function App() {
-  const { user, loading } = useAuth();
+  const auth = useAuthProvider();
   const [currentPage, setCurrentPage] = useState('dashboard');
 
-  if (loading) {
+  if (auth.loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -22,8 +22,12 @@ function App() {
     );
   }
 
-  if (!user) {
-    return <Auth />;
+  if (!auth.user) {
+    return (
+      <AuthContext.Provider value={auth}>
+        <Auth />
+      </AuthContext.Provider>
+    );
   }
 
   const renderPage = () => {
@@ -40,9 +44,11 @@ function App() {
   };
 
   return (
-    <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
-      {renderPage()}
-    </Layout>
+    <AuthContext.Provider value={auth}>
+      <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
+        {renderPage()}
+      </Layout>
+    </AuthContext.Provider>
   );
 }
 

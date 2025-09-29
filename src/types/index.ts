@@ -1,81 +1,113 @@
 export interface Customer {
-  id: string;
+  id: number;
   name: string;
   phone?: string;
   email?: string;
   address?: string;
-  created_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Vehicle {
-  id: string;
-  customer_id: string;
+  id: number;
+  customer_id: number;
   make: string;
   model: string;
   year?: number;
   license_plate?: string;
   vin?: string;
-  created_at: string;
-  customer?: Customer;
+  created_at?: string;
+  updated_at?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
 }
 
-export interface UserProfile {
-  id: string;
-  full_name: string;
+export interface User {
+  id: number;
+  email: string;
+  fullName: string;
   role: 'admin' | 'mechanic';
   phone?: string;
-  created_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface WorkOrder {
-  id: string;
-  vehicle_id: string;
-  customer_id: string;
-  assigned_mechanic?: string;
+  id: number;
+  vehicle_id: number;
+  customer_id: number;
+  assigned_mechanic?: number;
   title: string;
   description?: string;
   status: 'pending' | 'in_progress' | 'completed';
   labor_hours: number;
   labor_rate: number;
   total_amount: number;
-  created_at: string;
-  updated_at: string;
-  vehicle?: Vehicle;
-  customer?: Customer;
-  mechanic?: UserProfile;
+  created_at?: string;
+  updated_at?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  license_plate?: string;
+  mechanic_name?: string;
 }
 
 export interface InventoryItem {
-  id: string;
+  id: number;
   name: string;
   sku: string;
   stock_quantity: number;
   min_stock_level: number;
   price: number;
-  created_at: string;
+  created_at?: string;
+  updated_at?: string;
   is_low_stock?: boolean;
 }
 
 export interface WorkOrderPart {
-  id: string;
-  work_order_id: string;
-  inventory_item_id: string;
+  id: number;
+  work_order_id: number;
+  inventory_item_id: number;
   quantity_used: number;
   unit_price: number;
-  inventory_item?: InventoryItem;
+  name?: string;
+  sku?: string;
+  created_at?: string;
 }
 
 export interface Appointment {
-  id: string;
-  customer_id: string;
-  vehicle_id: string;
-  assigned_mechanic?: string;
+  id: number;
+  customer_id: number;
+  vehicle_id: number;
+  assigned_mechanic?: number;
   appointment_date: string;
   duration: string;
   description?: string;
   status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
-  created_at: string;
-  customer?: Customer;
-  vehicle?: Vehicle;
-  mechanic?: UserProfile;
+  created_at?: string;
+  updated_at?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  make?: string;
+  model?: string;
+  year?: number;
+  license_plate?: string;
+  mechanic_name?: string;
+}
+
+export interface DashboardStats {
+  totalCustomers: number;
+  totalVehicles: number;
+  pendingOrders: number;
+  inProgressOrders: number;
+  completedOrders: number;
+  totalInventoryItems: number;
+  lowStockItems: number;
+  todayAppointments: number;
+  totalAppointments: number;
 }
