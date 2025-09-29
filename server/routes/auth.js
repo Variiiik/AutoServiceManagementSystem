@@ -70,7 +70,11 @@ router.post('/login', [
   body('password').exists()
 ], async (req, res) => {
   try {
-    console.log('🔍 Login attempt:', { email: req.body.email, hasPassword: !!req.body.password });
+    console.log('🔍 Login attempt:', { 
+      email: req.body.email, 
+      hasPassword: !!req.body.password,
+      passwordLength: req.body.password ? req.body.password.length : 0
+    });
     
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -86,7 +90,15 @@ router.post('/login', [
       'SELECT id, user_id, email, full_name, role, phone, password_hash, created_at, updated_at FROM users WHERE email = $1',
       [email]
     );
-    console.log('🔍 User query result:', { found: result.rows.length, user: result.rows[0] ? { email: result.rows[0].email, hasPassword: !!result.rows[0].password_hash } : null });
+    console.log('🔍 User query result:', { 
+      found: result.rows.length, 
+      user: result.rows[0] ? { 
+        email: result.rows[0].email, 
+        hasPassword: !!result.rows[0].password_hash,
+        passwordHashLength: result.rows[0].password_hash ? result.rows[0].password_hash.length : 0,
+        role: result.rows[0].role
+      } : null 
+    });
 
     if (result.rows.length === 0) {
       console.log('❌ User not found');
@@ -101,7 +113,10 @@ router.post('/login', [
       return res.status(401).json({ error: 'Account not properly configured' });
     }
 
-    console.log('🔍 Comparing passwords...');
+    console.log('🔍 Comparing passwords...', {
+      inputPassword: password,
+      storedHashPrefix: user.password_hash.substring(0, 10) + '...'
+    });
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     console.log('🔍 Password valid:', isValidPassword);
