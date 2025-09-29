@@ -14,7 +14,7 @@ const authenticateToken = async (req, res, next) => {
     
     // Get user from database
     const result = await pool.query(
-      'SELECT * FROM users WHERE id = $1',
+      'SELECT id, user_id, email, full_name, role, phone FROM users WHERE user_id = $1 OR id = $1',
       [decoded.userId]
     );
 
@@ -24,9 +24,9 @@ const authenticateToken = async (req, res, next) => {
 
     const user = result.rows[0];
     req.user = {
-      id: user.id,
+      id: user.user_id || user.id,
       email: user.email,
-      full_name: user.full_name || user.name,
+      full_name: user.full_name,
       role: user.role,
       phone: user.phone
     };

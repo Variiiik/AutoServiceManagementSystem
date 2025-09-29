@@ -32,35 +32,17 @@ router.post('/register', [
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Create user - try different column combinations
-    let result;
-    try {
-      // Try with password_hash column first
-      result = await pool.query(
-        'INSERT INTO users (email, password_hash, full_name, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [email, hashedPassword, fullName, role, phone]
-      );
-    } catch (error) {
-      try {
-        // Try with password column
-        result = await pool.query(
-          'INSERT INTO users (email, password, name, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-          [email, hashedPassword, fullName, role, phone]
-        );
-      } catch (error2) {
-        // Try with different column names
-        result = await pool.query(
-          'INSERT INTO users (email, hashed_password, full_name, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-          [email, hashedPassword, fullName, role, phone]
-        );
-      }
-    }
+    // Create user
+    const result = await pool.query(
+      'INSERT INTO users (user_id, email, password_hash, full_name, role, phone) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5) RETURNING *',
+      [email, hashedPassword, fullName, role, phone]
+    );
 
     const user = result.rows[0];
 
     // Generate JWT
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { userId: user.user_id || user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
@@ -69,9 +51,9 @@ router.post('/register', [
       message: 'User created successfully',
       token,
       user: {
-        id: user.id,
+        id: user.user_id || user.id,
         email: user.email,
-        fullName: user.full_name || user.name,
+        fullName: user.full_name,
         role: user.role,
         phone: user.phone
       }
@@ -97,7 +79,7 @@ router.post('/login', [
 
     // Find user
     const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1',
+      'SELECT id, user_id, email, full_name, role, phone, password_hash, created_at, updated_at FROM users WHERE email = $1',
       [email]
     );
 
@@ -107,16 +89,20 @@ router.post('/login', [
 
     const user = result.rows[0];
 
+    // Check if password_hash exists
+    if (!user.password_hash) {
+      return res.status(401).json({ error: 'Account not properly configured' });
+    }
+
     // Check password
-    const passwordField = user.password_hash || user.password || user.hashed_password;
-    const isValidPassword = await bcrypt.compare(password, passwordField);
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Generate JWT
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { userId: user.user_id || user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
@@ -125,9 +111,9 @@ router.post('/login', [
       message: 'Login successful',
       token,
       user: {
-        id: user.id,
+        id: user.user_id || user.id,
         email: user.email,
-        fullName: user.full_name || user.name,
+        fullName: user.full_name,
         role: user.role,
         phone: user.phone
       }
