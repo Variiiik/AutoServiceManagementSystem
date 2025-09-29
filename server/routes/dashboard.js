@@ -26,8 +26,8 @@ router.get('/stats', authenticateToken, async (req, res) => {
       pool.query(`
         SELECT 
           COUNT(*) as total_items,
-          COUNT(*) FILTER (WHERE stock_quantity <= min_stock_level) as low_stock_items
-        FROM inventory_items
+          COUNT(*) FILTER (WHERE stock_quantity <= min_stock_level) as low_stock_items  
+        FROM inventory
       `),
       pool.query(`
         SELECT 
@@ -126,7 +126,7 @@ router.get('/today-appointments', authenticateToken, async (req, res) => {
 router.get('/low-stock', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT * FROM inventory_items 
+      SELECT * FROM inventory 
       WHERE stock_quantity <= min_stock_level 
       ORDER BY stock_quantity ASC 
       LIMIT 10

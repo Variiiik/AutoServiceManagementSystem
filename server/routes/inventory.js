@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT *, (stock_quantity <= min_stock_level) as is_low_stock FROM inventory_items ORDER BY name'
+      'SELECT *, (stock_quantity <= min_stock_level) as is_low_stock FROM inventory ORDER BY name'
     );
     res.json(result.rows);
   } catch (error) {
@@ -23,7 +23,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'SELECT *, (stock_quantity <= min_stock_level) as is_low_stock FROM inventory_items WHERE id = $1',
+      'SELECT *, (stock_quantity <= min_stock_level) as is_low_stock FROM inventory WHERE id = $1',
       [id]
     );
     
@@ -63,7 +63,7 @@ router.post('/', [
     } = req.body;
 
     const result = await pool.query(
-      'INSERT INTO inventory_items (name, sku, stock_quantity, min_stock_level, price) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      'INSERT INTO inventory (name, sku, stock_quantity, min_stock_level, price) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [name, sku, stock_quantity, min_stock_level, price]
     );
 
@@ -97,7 +97,7 @@ router.put('/:id', [
     const { name, sku, stock_quantity, min_stock_level, price } = req.body;
 
     const result = await pool.query(
-      'UPDATE inventory_items SET name = $1, sku = $2, stock_quantity = $3, min_stock_level = $4, price = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
+      'UPDATE inventory SET name = $1, sku = $2, stock_quantity = $3, min_stock_level = $4, price = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *',
       [name, sku, stock_quantity, min_stock_level, price, id]
     );
 
@@ -130,7 +130,7 @@ router.patch('/:id/stock', [
     const { stock_quantity } = req.body;
 
     const result = await pool.query(
-      'UPDATE inventory_items SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+      'UPDATE inventory SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
       [stock_quantity, id]
     );
 
@@ -153,7 +153,7 @@ router.delete('/:id', [
   try {
     const { id } = req.params;
 
-    const result = await pool.query('DELETE FROM inventory_items WHERE id = $1 RETURNING *', [id]);
+    const result = await pool.query('DELETE FROM inventory WHERE id = $1 RETURNING *', [id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Inventory item not found' });
