@@ -211,8 +211,8 @@ router.get('/:id/parts', authenticateToken, async (req, res) => {
 
     const result = await pool.query(`
       SELECT wop.*, ii.name, ii.sku
-      FROM work_order_items wop
-      LEFT JOIN inventory ii ON wop.inventory_id = ii.id
+      FROM work_order_parts wop
+      LEFT JOIN inventory_items ii ON wop.inventory_item_id = ii.id
       WHERE wop.work_order_id = $1
       ORDER BY wop.created_at
     `, [id]);
@@ -238,7 +238,7 @@ router.post('/:id/parts', [
     }
 
     const { id } = req.params;
-    const { inventory_id, quantity_used, unit_price } = req.body;
+    const { inventory_item_id, quantity_used, unit_price } = req.body;
 
     // Check if user can modify this work order
     if (req.user.role === 'mechanic') {
@@ -258,14 +258,14 @@ router.post('/:id/parts', [
 
     // Add part to work order
     const result = await pool.query(
-      'INSERT INTO work_order_items (work_order_id, inventory_id, quantity_used, unit_price) VALUES ($1, $2, $3, $4) RETURNING *',
-      [id, inventory_id, quantity_used, unit_price]
+      'INSERT INTO work_order_parts (work_order_id, inventory_item_id, quantity_used, unit_price) VALUES ($1, $2, $3, $4) RETURNING *',
+      [id, inventory_item_id, quantity_used, unit_price]
     );
 
     // Update inventory stock
     await pool.query(
-      'UPDATE inventory SET stock_quantity = stock_quantity - $1 WHERE id = $2',
-      [quantity_used, inventory_id]
+      'UPDATE inventory_items SET stock_quantity = stock_quantity - $1 WHERE id = $2',
+      [quantity_used, inventory_item_id]
     );
 
     res.status(201).json(result.rows[0]);

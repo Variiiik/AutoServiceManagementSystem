@@ -6,7 +6,7 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { VehiclesPage } from './pages/VehiclesPage';
-import { WorkOrdersPage } from './pages/WorkOrdersPage';
+import { WorkOrders } from './components/WorkOrders';
 import { InventoryPage } from './pages/InventoryPage';
 import { AppointmentsPage } from './pages/AppointmentsPage';
 import { BillingPage } from './pages/BillingPage';
@@ -23,7 +23,7 @@ function App() {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="customers" element={<CustomersPage />} />
             <Route path="vehicles" element={<VehiclesPage />} />
-            <Route path="work-orders" element={<WorkOrdersPage />} />
+            <Route path="work-orders" element={<WorkOrders />} />
             <Route path="inventory" element={<InventoryPage />} />
             <Route path="appointments" element={<AppointmentsPage />} />
             <Route path="billing" element={<BillingPage />} />

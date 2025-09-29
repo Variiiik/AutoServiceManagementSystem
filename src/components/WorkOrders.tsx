@@ -15,9 +15,15 @@ export function WorkOrders() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showAddPartModal, setShowAddPartModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
   const [orderParts, setOrderParts] = useState<WorkOrderPart[]>([]);
+  const [addPartForm, setAddPartForm] = useState({
+    inventory_item_id: '',
+    quantity_used: '1',
+    unit_price: ''
+  });
   const [formData, setFormData] = useState({
     vehicle_id: '',
     title: '',
@@ -113,6 +119,35 @@ export function WorkOrders() {
     setSelectedOrder(order);
     fetchOrderParts(order.id);
     setShowDetailsModal(true);
+  };
+
+  const handleAddPart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrder) return;
+
+    try {
+      const selectedInventoryItem = inventory.find(item => item.id.toString() === addPartForm.inventory_item_id);
+      const partData = {
+        inventory_item_id: parseInt(addPartForm.inventory_item_id),
+        quantity_used: parseInt(addPartForm.quantity_used),
+        unit_price: parseFloat(addPartForm.unit_price || selectedInventoryItem?.price.toString() || '0')
+      };
+
+      await workOrdersAPI.addPart(parseInt(selectedOrder.id), partData);
+      
+      setShowAddPartModal(false);
+      setAddPartForm({
+        inventory_item_id: '',
+        quantity_used: '1',
+        unit_price: ''
+      });
+      
+      // Refresh order parts and work orders
+      fetchOrderParts(selectedOrder.id);
+      fetchData();
+    } catch (error) {
+      console.error('Error adding part:', error);
+    }
   };
 
   const handleDelete = async (order: WorkOrder) => {
@@ -291,6 +326,7 @@ export function WorkOrders() {
                       <button
                         onClick={() => handleViewDetails(order)}
                         className="text-blue-600 hover:text-blue-900"
+                       title="View Details"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -298,6 +334,7 @@ export function WorkOrders() {
                         <button
                           onClick={() => handleEdit(order)}
                           className="text-yellow-600 hover:text-yellow-900"
+                         title="Edit Order"
                         >
                           <Edit3 className="h-4 w-4" />
                         </button>
@@ -306,6 +343,7 @@ export function WorkOrders() {
                         <button
                           onClick={() => handleDelete(order)}
                           className="text-red-600 hover:text-red-900"
+                         title="Delete Order"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -518,7 +556,7 @@ export function WorkOrders() {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <td className="px-4 py-2 text-sm text-gray-900">{part.name}</td>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
@@ -527,7 +565,7 @@ export function WorkOrders() {
                       <tbody className="divide-y divide-gray-200">
                         {orderParts.map((part) => (
                           <tr key={part.id}>
-                            <td className="px-4 py-2 text-sm text-gray-900">{part.inventory_item?.name}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{part.name || 'Unknown Part'}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">{part.quantity_used}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">${part.unit_price.toFixed(2)}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">${(part.quantity_used * part.unit_price).toFixed(2)}</td>
@@ -536,11 +574,33 @@ export function WorkOrders() {
                       </tbody>
                     </table>
                   </div>
+                  
+                  {canEditOrder(selectedOrder) && selectedOrder.status !== 'completed' && (
+                    <div className="mt-4">
+                      <button
+                        onClick={() => setShowAddPartModal(true)}
+                        className="bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 text-sm flex items-center space-x-1"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>Add Part</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
             
-            <div className="flex justify-end pt-4">
+            <div className="flex justify-between pt-4">
+              {canEditOrder(selectedOrder) && selectedOrder.status !== 'completed' && (
+                <button
+                  onClick={() => setShowAddPartModal(true)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center space-x-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Parts</span>
+                </button>
+              )}
+              <div className="flex-1"></div>
               <button
                 onClick={() => setShowDetailsModal(false)}
                 className="bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
@@ -548,6 +608,96 @@ export function WorkOrders() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Part Modal */}
+      {showAddPartModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Add Part to Work Order</h2>
+            
+            <form onSubmit={handleAddPart} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Part *
+                </label>
+                <select
+                  value={addPartForm.inventory_item_id}
+                  onChange={(e) => {
+                    const selectedItem = inventory.find(item => item.id.toString() === e.target.value);
+                    setAddPartForm({ 
+                      ...addPartForm, 
+                      inventory_item_id: e.target.value,
+                      unit_price: selectedItem?.price.toString() || ''
+                    });
+                  }}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Select a part</option>
+                  {inventory.filter(item => item.stock_quantity > 0).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} - ${item.price.toFixed(2)} ({item.stock_quantity} in stock)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={addPartForm.quantity_used}
+                    onChange={(e) => setAddPartForm({ ...addPartForm, quantity_used: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Unit Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={addPartForm.unit_price}
+                    onChange={(e) => setAddPartForm({ ...addPartForm, unit_price: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="submit"
+                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700"
+                >
+                  Add Part
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddPartModal(false);
+                    setAddPartForm({
+                      inventory_item_id: '',
+                      quantity_used: '1',
+                      unit_price: ''
+                    });
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
