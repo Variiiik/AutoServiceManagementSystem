@@ -4,7 +4,7 @@ require('dotenv').config();
 // Database configuration with better error handling
 const dbConfig = {
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: false,
   // Connection pool settings
   max: 20,
   idleTimeoutMillis: 30000,
