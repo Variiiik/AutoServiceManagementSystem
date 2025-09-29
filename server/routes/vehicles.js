@@ -48,14 +48,6 @@ router.post('/', [
   authenticateToken,
   requireRole(['admin']),
   body('customer_id').isInt({ min: 1 }),
-  body('make').trim().isLength({ min: 1 }),
-  body('model').trim().isLength({ min: 1 }),
-  body('year').optional().isInt({ min: 1900, max: new Date().getFullYear() + 1 }),
-  body('license_plate').optional().trim(),
-  body('vin').optional().trim()
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
@@ -64,7 +56,7 @@ router.post('/', [
 
     const result = await pool.query(
       'INSERT INTO vehicles (customer_id, make, model, year, license_plate, vin) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [parseInt(customer_id), make, model, year, license_plate, vin]
+      [customer_id, make, model, year, license_plate, vin]
     );
 
     res.status(201).json(result.rows[0]);
@@ -79,15 +71,6 @@ router.put('/:id', [
   authenticateToken,
   requireRole(['admin']),
   body('customer_id').isInt({ min: 1 }),
-  body('make').trim().isLength({ min: 1 }),
-  body('model').trim().isLength({ min: 1 }),
-  body('year').optional().isInt({ min: 1900, max: new Date().getFullYear() + 1 }),
-  body('license_plate').optional().trim(),
-  body('vin').optional().trim()
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -96,7 +79,7 @@ router.put('/:id', [
 
     const result = await pool.query(
       'UPDATE vehicles SET customer_id = $1, make = $2, model = $3, year = $4, license_plate = $5, vin = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
-      [parseInt(customer_id), make, model, year, license_plate, vin, id]
+      [customer_id, make, model, year, license_plate, vin, id]
     );
 
     if (result.rows.length === 0) {

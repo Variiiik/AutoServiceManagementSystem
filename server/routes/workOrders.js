@@ -79,36 +79,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
 router.post('/', [
   authenticateToken,
   requireRole(['admin']),
-  body('vehicle_id').custom((value) => {
-    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      return true;
-    }
-    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
-      return true;
-    }
-    throw new Error('Invalid vehicle_id format');
-  }),
-  body('customer_id').custom((value) => {
-    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      return true;
-    }
-    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
-      return true;
-    }
-    throw new Error('Invalid customer_id format');
-  }),
+  body('vehicle_id').isInt({ min: 1 }),
+  body('customer_id').isInt({ min: 1 }),
   body('title').trim().isLength({ min: 1 }),
   body('description').optional().trim(),
-  body('assigned_mechanic').optional().custom((value) => {
-    if (!value) return true; // Allow null/undefined
-    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      return true;
-    }
-    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
-      return true;
-    }
-    throw new Error('Invalid assigned_mechanic format');
-  }),
+  body('assigned_mechanic').optional().isInt({ min: 1 }),
   body('labor_hours').optional().isFloat({ min: 0 }),
   body('labor_rate').optional().isFloat({ min: 0 })
 ], async (req, res) => {
