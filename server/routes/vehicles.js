@@ -48,6 +48,14 @@ router.post('/', [
   authenticateToken,
   requireRole(['admin']),
   body('customer_id').isInt({ min: 1 }),
+  body('make').notEmpty().trim(),
+  body('model').notEmpty().trim(),
+  body('year').isInt({ min: 1900, max: new Date().getFullYear() + 1 }),
+  body('license_plate').notEmpty().trim(),
+  body('vin').optional().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
@@ -71,6 +79,15 @@ router.put('/:id', [
   authenticateToken,
   requireRole(['admin']),
   body('customer_id').isInt({ min: 1 }),
+  body('make').notEmpty().trim(),
+  body('model').notEmpty().trim(),
+  body('year').isInt({ min: 1900, max: new Date().getFullYear() + 1 }),
+  body('license_plate').notEmpty().trim(),
+  body('vin').optional().trim()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
