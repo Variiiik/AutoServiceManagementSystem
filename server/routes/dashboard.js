@@ -85,7 +85,7 @@ router.get('/recent-orders', authenticateToken, async (req, res) => {
     
     // Mechanics can only see their assigned work orders
     if (req.user.role === 'mechanic') {
-      query += ' WHERE wo.assigned_mechanic = $1';
+      query += ' WHERE (wo.assigned_mechanic = $1 OR wo.assigned_mechanic IS NULL)';
       params.push(req.user.id);
     }
     
@@ -95,7 +95,7 @@ router.get('/recent-orders', authenticateToken, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching recent orders:', error);
-    res.status(500).json({ error: 'Internal server error', details: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -118,7 +118,7 @@ router.get('/today-appointments', authenticateToken, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching today appointments:', error);
-    res.status(500).json({ error: 'Internal server error', details: error.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
