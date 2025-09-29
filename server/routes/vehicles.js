@@ -47,16 +47,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 router.post('/', [
   authenticateToken,
   requireRole(['admin']),
-  body('customer_id').custom((value) => {
-    // Handle both UUID and integer formats
-    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      return true; // Valid UUID
-    }
-    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
-      return true; // Valid integer
-    }
-    throw new Error('Invalid customer_id format');
-  }),
+  body('customer_id').isInt({ min: 1 }),
   body('make').trim().isLength({ min: 1 }),
   body('model').trim().isLength({ min: 1 }),
   body('year').optional().isInt({ min: 1900, max: new Date().getFullYear() + 1 }),
@@ -69,16 +60,11 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    let { customer_id, make, model, year, license_plate, vin } = req.body;
-
-    // Convert customer_id to proper format if needed
-    if (typeof customer_id === 'string' && !customer_id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      customer_id = parseInt(customer_id);
-    }
+    const { customer_id, make, model, year, license_plate, vin } = req.body;
 
     const result = await pool.query(
       'INSERT INTO vehicles (customer_id, make, model, year, license_plate, vin) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [customer_id, make, model, year, license_plate, vin]
+      [parseInt(customer_id), make, model, year, license_plate, vin]
     );
 
     res.status(201).json(result.rows[0]);
@@ -92,16 +78,7 @@ router.post('/', [
 router.put('/:id', [
   authenticateToken,
   requireRole(['admin']),
-  body('customer_id').custom((value) => {
-    // Handle both UUID and integer formats
-    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      return true; // Valid UUID
-    }
-    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
-      return true; // Valid integer
-    }
-    throw new Error('Invalid customer_id format');
-  }),
+  body('customer_id').isInt({ min: 1 }),
   body('make').trim().isLength({ min: 1 }),
   body('model').trim().isLength({ min: 1 }),
   body('year').optional().isInt({ min: 1900, max: new Date().getFullYear() + 1 }),
@@ -115,16 +92,11 @@ router.put('/:id', [
     }
 
     const { id } = req.params;
-    let { customer_id, make, model, year, license_plate, vin } = req.body;
-
-    // Convert customer_id to proper format if needed
-    if (typeof customer_id === 'string' && !customer_id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      customer_id = parseInt(customer_id);
-    }
+    const { customer_id, make, model, year, license_plate, vin } = req.body;
 
     const result = await pool.query(
       'UPDATE vehicles SET customer_id = $1, make = $2, model = $3, year = $4, license_plate = $5, vin = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
-      [customer_id, make, model, year, license_plate, vin, id]
+      [parseInt(customer_id), make, model, year, license_plate, vin, id]
     );
 
     if (result.rows.length === 0) {
