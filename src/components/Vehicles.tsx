@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { vehiclesAPI, customersAPI } from '../lib/api';
 import { Vehicle, Customer } from '../types';
-import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'lucide-react'nction Vehicles() {
+import { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'lucide-react';
+
+export function Vehicles() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,25 +25,13 @@ import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'luci
 
   const fetchData = async () => {
     try {
-      const [vehiclesRes, customersRes] = await Promise.all([
-        supabase
-          .from('vehicles')
-          .select(`
-            *,
-            customer:customers(*)
-          `)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('customers')
-          .select('*')
-          .order('name')
+      const [vehiclesResponse, customersResponse] = await Promise.all([
+        vehiclesAPI.getAll(),
+        customersAPI.getAll()
       ]);
 
-      if (vehiclesRes.error) throw vehiclesRes.error;
-      if (customersRes.error) throw customersRes.error;
-
-      setVehicles(vehiclesRes.data || []);
-      setCustomers(customersRes.data || []);
+      setVehicles(vehiclesResponse.data);
+      setCustomers(customersResponse.data);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -55,22 +45,14 @@ import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'luci
     try {
       const vehicleData = {
         ...formData,
+        customer_id: parseInt(formData.customer_id),
         year: formData.year ? parseInt(formData.year) : null
       };
 
       if (editingVehicle) {
-        const { error } = await supabase
-          .from('vehicles')
-          .update(vehicleData)
-          .eq('id', editingVehicle.id);
-        
-        if (error) throw error;
+        await vehiclesAPI.update(editingVehicle.id, vehicleData);
       } else {
-        const { error } = await supabase
-          .from('vehicles')
-          .insert(vehicleData);
-        
-        if (error) throw error;
+        await vehiclesAPI.create(vehicleData);
       }
       
       setShowModal(false);
@@ -92,7 +74,7 @@ import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'luci
   const handleEdit = (vehicle: Vehicle) => {
     setEditingVehicle(vehicle);
     setFormData({
-      customer_id: vehicle.customer_id,
+      customer_id: vehicle.customer_id.toString(),
       make: vehicle.make,
       model: vehicle.model,
       year: vehicle.year?.toString() || '',
@@ -106,12 +88,7 @@ import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'luci
     const vehicleLabel = `${vehicle.year || ''} ${vehicle.make} ${vehicle.model}`.trim();
     if (window.confirm(`Are you sure you want to delete ${vehicleLabel}?`)) {
       try {
-        const { error } = await supabase
-          .from('vehicles')
-          .delete()
-          .eq('id', vehicle.id);
-        
-        if (error) throw error;
+        await vehiclesAPI.delete(vehicle.id);
         fetchData();
       } catch (error) {
         console.error('Error deleting vehicle:', error);
@@ -124,7 +101,7 @@ import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'luci
     vehicle.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
     vehicle.license_plate?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     vehicle.vin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vehicle.customer?.name.toLowerCase().includes(searchTerm.toLowerCase())
+    vehicle.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
@@ -190,7 +167,7 @@ import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'luci
             <div className="space-y-2">
               <div>
                 <span className="text-sm font-medium text-gray-700">Owner: </span>
-                <span className="text-sm text-gray-600">{vehicle.customer?.name}</span>
+                <span className="text-sm text-gray-600">{vehicle.customer_name}</span>
               </div>
               {vehicle.license_plate && (
                 <div>
@@ -208,7 +185,7 @@ import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'luci
             
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-xs text-gray-500">
-                Added {new Date(vehicle.created_at).toLocaleDateString()}
+                Added {new Date(vehicle.created_at || '').toLocaleDateString()}
               </p>
             </div>
           </div>
