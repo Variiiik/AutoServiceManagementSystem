@@ -98,6 +98,19 @@ export interface Appointment {
   year?: number;
   license_plate?: string;
   mechanic_name?: string;
+  customer?: {
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  };
+  vehicle?: {
+    make: string;
+    model: string;
+    year?: number;
+    license_plate?: string;
+    vin?: string;
+  };
 }
 
 export interface DashboardStats {

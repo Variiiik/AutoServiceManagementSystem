@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { workOrdersAPI, vehiclesAPI, inventoryAPI } from '../lib/api';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import { WorkOrder, Vehicle, User, WorkOrderPart, InventoryItem } from '../types';
 import { Plus, Search, CreditCard as Edit3, Trash2, Eye, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 

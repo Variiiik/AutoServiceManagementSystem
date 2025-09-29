@@ -25,16 +25,28 @@ export const DashboardPage: React.FC = () => {
   const { data: recentOrders } = useQuery({
     queryKey: ['recent-orders'],
     queryFn: () => dashboardAPI.getRecentOrders().then(res => res.data),
+    retry: 1,
+    onError: (error) => {
+      console.error('Error fetching recent orders:', error);
+    }
   });
 
   const { data: todayAppointments } = useQuery({
     queryKey: ['today-appointments'],
     queryFn: () => dashboardAPI.getTodayAppointments().then(res => res.data),
+    retry: 1,
+    onError: (error) => {
+      console.error('Error fetching today appointments:', error);
+    }
   });
 
   const { data: lowStockItems } = useQuery({
     queryKey: ['low-stock'],
     queryFn: () => dashboardAPI.getLowStock().then(res => res.data),
+    retry: 1,
+    onError: (error) => {
+      console.error('Error fetching low stock items:', error);
+    }
   });
 
   const getStatusColor = (status: string) => {
