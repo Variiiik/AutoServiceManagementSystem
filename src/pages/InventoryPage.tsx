@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { inventoryAPI } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { InventoryItem } from '../types';
-import { Plus, Search, Edit3, Trash2, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit3, Trash2, Package, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const InventoryPage: React.FC = () => {

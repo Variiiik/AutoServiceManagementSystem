@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { vehiclesAPI, customersAPI } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Vehicle, Customer } from '../types';
-import { Plus, Search, Edit3, Trash2, Car } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const VehiclesPage: React.FC = () => {
