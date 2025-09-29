@@ -9,10 +9,10 @@ interface LayoutProps {
 }
 
 export function Layout({ children, currentPage, onPageChange }: LayoutProps) {
-  const { profile, signOut } = useAuth();
+  const { user, signOut } = useAuth();
 
   const handleSignOut = async () => {
-    await signOut();
+    signOut();
   };
 
   const menuItems = [
@@ -26,7 +26,7 @@ export function Layout({ children, currentPage, onPageChange }: LayoutProps) {
   ];
 
   const visibleMenuItems = menuItems.filter(item => 
-    !item.admin || profile?.role === 'admin'
+    !item.admin || user?.role === 'admin'
   );
 
   return (
@@ -65,8 +65,8 @@ export function Layout({ children, currentPage, onPageChange }: LayoutProps) {
         <div className="absolute bottom-0 w-64 p-4 border-t">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-900">{profile?.full_name}</p>
-              <p className="text-xs text-gray-500 capitalize">{profile?.role}</p>
+              <p className="text-sm font-medium text-gray-900">{user?.full_name}</p>
+              <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
             </div>
             <button
               onClick={handleSignOut}

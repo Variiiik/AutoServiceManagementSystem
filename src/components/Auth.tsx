@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { hasValidCredentials } from '../lib/supabase';
 import { Wrench, Eye, EyeOff } from 'lucide-react';
 
 export function Auth() {
@@ -15,49 +14,6 @@ export function Auth() {
 
   const { signIn, signUp } = useAuth();
 
-  // Show setup message if Supabase is not configured
-  if (!hasValidCredentials) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-100 flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          <div className="bg-white rounded-2xl shadow-xl p-8">
-            <div className="text-center mb-8">
-              <div className="flex justify-center items-center space-x-2 mb-4">
-                <Wrench className="h-10 w-10 text-blue-600" />
-                <h1 className="text-2xl font-bold text-gray-900">AutoService Pro</h1>
-              </div>
-              <p className="text-gray-600">Setup Required</p>
-            </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-              <h3 className="text-sm font-medium text-yellow-800 mb-2">Supabase Configuration Needed</h3>
-              <p className="text-sm text-yellow-700 mb-3">
-                To use this application, you need to set up Supabase and configure your environment variables.
-              </p>
-              <div className="text-xs text-yellow-600">
-                <p className="mb-2"><strong>Steps:</strong></p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Create a Supabase project at <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="underline">supabase.com</a></li>
-                  <li>Get your project URL and anon key from Settings → API</li>
-                  <li>Update the .env file with your credentials</li>
-                  <li>Run the database migration from the supabase/migrations folder</li>
-                </ol>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-800 mb-2">Environment Variables:</h4>
-              <pre className="text-xs text-gray-600 bg-white p-2 rounded border">
-{`VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here`}
-              </pre>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -65,11 +21,11 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here`}
 
     try {
       if (isLogin) {
-        const { error } = await signIn(email, password);
-        if (error) setError(error.message);
+        const result = await signIn(email, password);
+        if (!result.success) setError(result.error || 'Login failed');
       } else {
-        const { error } = await signUp(email, password, fullName, role);
-        if (error) setError(error.message);
+        const result = await signUp(email, password, fullName, role);
+        if (!result.success) setError(result.error || 'Registration failed');
       }
     } catch (err) {
       setError('An unexpected error occurred');

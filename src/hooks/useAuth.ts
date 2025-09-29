@@ -4,7 +4,7 @@ import { authAPI } from '../lib/api';
 interface User {
   id: number;
   email: string;
-  fullName: string;
+  full_name: string;
   role: 'admin' | 'mechanic';
   phone?: string;
 }
@@ -12,9 +12,9 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (email: string, password: string, fullName: string, role: 'admin' | 'mechanic', phone?: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'mechanic', phone?: string) => Promise<{ success: boolean; error?: string }>;
+  signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -57,7 +57,7 @@ export const useAuthProvider = () => {
     initAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string) => {
     try {
       const response = await authAPI.login(email, password);
       const { token, user: userData } = response.data;
@@ -73,7 +73,7 @@ export const useAuthProvider = () => {
     }
   };
 
-  const register = async (email: string, password: string, fullName: string, role: 'admin' | 'mechanic', phone?: string) => {
+  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'mechanic', phone?: string) => {
     try {
       const response = await authAPI.register(email, password, fullName, role, phone);
       const { token, user: userData } = response.data;
@@ -89,7 +89,7 @@ export const useAuthProvider = () => {
     }
   };
 
-  const logout = () => {
+  const signOut = () => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     setUser(null);
@@ -98,9 +98,9 @@ export const useAuthProvider = () => {
   return {
     user,
     loading,
-    login,
-    register,
-    logout,
+    signIn,
+    signUp,
+    signOut,
   };
 };
 
