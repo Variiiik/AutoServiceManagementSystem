@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { appointmentsAPI, vehiclesAPI } from '../lib/api';
 import { Appointment, Vehicle, User } from '../types';
-import { Plus, Search, Edit3, Trash2, Calendar, Clock } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit3, Trash2, Calendar, Clock } from 'lucide-react';
 
 export function Appointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);

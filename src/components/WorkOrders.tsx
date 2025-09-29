@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { workOrdersAPI, vehiclesAPI, inventoryAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { WorkOrder, Vehicle, User, WorkOrderPart, InventoryItem } from '../types';
-import { Plus, Search, Edit3, Trash2, Eye, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit3, Trash2, Eye, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
 export function WorkOrders() {
   const { user } = useAuth();

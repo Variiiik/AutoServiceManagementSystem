@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { customersAPI } from '../lib/api';
 import { Customer } from '../types';
-import { Plus, Search, Edit3, Trash2, Phone, Mail, MapPin } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit3, Trash2, Phone, Mail, MapPin } from 'lucide-react';
 
 export function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);

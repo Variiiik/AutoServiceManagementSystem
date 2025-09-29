@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { vehiclesAPI, customersAPI } from '../lib/api';
+import { supabase } from '../lib/supabase';
 import { Vehicle, Customer } from '../types';
-import { Plus, Search, Edit3, Trash2, Car } from 'lucide-react';
-
-export function Vehicles() {
+import { Pluimport { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'lucide-react'nction Vehicles() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,13 +23,25 @@ export function Vehicles() {
 
   const fetchData = async () => {
     try {
-      const [vehiclesResponse, customersResponse] = await Promise.all([
-        vehiclesAPI.getAll(),
-        customersAPI.getAll()
+      const [vehiclesRes, customersRes] = await Promise.all([
+        supabase
+          .from('vehicles')
+          .select(`
+            *,
+            customer:customers(*)
+          `)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('customers')
+          .select('*')
+          .order('name')
       ]);
 
-      setVehicles(vehiclesResponse.data);
-      setCustomers(customersResponse.data);
+      if (vehiclesRes.error) throw vehiclesRes.error;
+      if (customersRes.error) throw customersRes.error;
+
+      setVehicles(vehiclesRes.data || []);
+      setCustomers(customersRes.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -49,9 +59,18 @@ export function Vehicles() {
       };
 
       if (editingVehicle) {
-        await vehiclesAPI.update(editingVehicle.id, vehicleData);
+        const { error } = await supabase
+          .from('vehicles')
+          .update(vehicleData)
+          .eq('id', editingVehicle.id);
+        
+        if (error) throw error;
       } else {
-        await vehiclesAPI.create(vehicleData);
+        const { error } = await supabase
+          .from('vehicles')
+          .insert(vehicleData);
+        
+        if (error) throw error;
       }
       
       setShowModal(false);
@@ -87,7 +106,12 @@ export function Vehicles() {
     const vehicleLabel = `${vehicle.year || ''} ${vehicle.make} ${vehicle.model}`.trim();
     if (window.confirm(`Are you sure you want to delete ${vehicleLabel}?`)) {
       try {
-        await vehiclesAPI.delete(vehicle.id);
+        const { error } = await supabase
+          .from('vehicles')
+          .delete()
+          .eq('id', vehicle.id);
+        
+        if (error) throw error;
         fetchData();
       } catch (error) {
         console.error('Error deleting vehicle:', error);
@@ -166,7 +190,7 @@ export function Vehicles() {
             <div className="space-y-2">
               <div>
                 <span className="text-sm font-medium text-gray-700">Owner: </span>
-                <span className="text-sm text-gray-600">{vehicle.customer_name}</span>
+                <span className="text-sm text-gray-600">{vehicle.customer?.name}</span>
               </div>
               {vehicle.license_plate && (
                 <div>
