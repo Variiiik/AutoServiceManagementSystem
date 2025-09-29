@@ -45,8 +45,8 @@ A comprehensive auto service management system built with React, TypeScript, Nod
    ```
 
 2. **Access the application**:
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000
+   - Frontend: http://192.168.2.10:3000
+   - Backend API: http://192.168.2.10:5000
 
 3. **Default login credentials**:
    - Email: admin@autoservice.com

@@ -28,7 +28,7 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/auto_service_db
       - JWT_SECRET=auto-service-super-secret-jwt-key-2024
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=http://192.168.2.10:3000
     depends_on:
       postgres:
         condition: service_healthy
