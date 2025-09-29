@@ -7,7 +7,9 @@ async function runMigrations() {
     console.log('🔄 Running database migrations...');
     
     // Get all migration files
-    const migrationFiles = fs.readdirSync(__dirname)
+    const migrationFiles = fs.readdirSync(__dirname, { withFileTypes: true })
+      .filter(dirent => dirent.isFile())
+      .map(dirent => dirent.name)
       .filter(file => file.endsWith('.sql'))
       .sort();
     
