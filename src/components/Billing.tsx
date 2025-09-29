@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { workOrdersAPI } from '../lib/api';
 import { WorkOrder, WorkOrderPart } from '../types';
 import { FileText, Download, Eye, DollarSign } from 'lucide-react';
 
@@ -16,19 +16,10 @@ export function Billing() {
 
   const fetchWorkOrders = async () => {
     try {
-      const { data, error } = await supabase
-        .from('work_orders')
-        .select(`
-          *,
-          customer:customers(*),
-          vehicle:vehicles(*),
-          mechanic:user_profiles(*)
-        `)
-        .eq('status', 'completed')
-        .order('updated_at', { ascending: false });
-      
-      if (error) throw error;
-      setWorkOrders(data || []);
+      const response = await workOrdersAPI.getAll();
+      // Filter for completed orders only
+      const completedOrders = response.data.filter(order => order.status === 'completed');
+      setWorkOrders(completedOrders);
     } catch (error) {
       console.error('Error fetching work orders:', error);
     } finally {
@@ -38,16 +29,8 @@ export function Billing() {
 
   const fetchOrderParts = async (orderId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('work_order_parts')
-        .select(`
-          *,
-          inventory_item:inventory_items(*)
-        `)
-        .eq('work_order_id', orderId);
-
-      if (error) throw error;
-      setOrderParts(data || []);
+      const response = await workOrdersAPI.getParts(parseInt(orderId));
+      setOrderParts(response.data);
     } catch (error) {
       console.error('Error fetching order parts:', error);
     }
@@ -139,7 +122,7 @@ export function Billing() {
               ` : ''}
               ${parts.map(part => `
                 <tr>
-                  <td>${part.inventory_item?.name || 'Part'}</td>
+                  <td>${part.name || 'Part'}</td>
                   <td>${part.quantity_used}</td>
                   <td>$${part.unit_price.toFixed(2)}</td>
                   <td>$${(part.quantity_used * part.unit_price).toFixed(2)}</td>
@@ -260,12 +243,14 @@ export function Billing() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{order.customer?.name}</div>
-                    <div className="text-sm text-gray-500">{order.customer?.email}</div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{order.customer_name}</div>
+                      <div className="text-sm text-gray-500">{order.customer_email}</div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {order.vehicle?.year} {order.vehicle?.make} {order.vehicle?.model}
+                      {order.year} {order.make} {order.model}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -352,18 +337,16 @@ export function Billing() {
                   <div>
                     <h3 className="font-semibold mb-2">Bill To:</h3>
                     <div className="text-sm">
-                      <p><strong>{selectedOrder.customer?.name}</strong></p>
-                      {selectedOrder.customer?.email && <p>{selectedOrder.customer.email}</p>}
-                      {selectedOrder.customer?.phone && <p>{selectedOrder.customer.phone}</p>}
-                      {selectedOrder.customer?.address && <p>{selectedOrder.customer.address}</p>}
+                      <p><strong>{selectedOrder.customer_name}</strong></p>
+                      {selectedOrder.customer_email && <p>{selectedOrder.customer_email}</p>}
+                      {selectedOrder.customer_phone && <p>{selectedOrder.customer_phone}</p>}
                     </div>
                   </div>
                   <div>
                     <h3 className="font-semibold mb-2">Vehicle Information:</h3>
                     <div className="text-sm">
-                      <p><strong>{selectedOrder.vehicle?.year} {selectedOrder.vehicle?.make} {selectedOrder.vehicle?.model}</strong></p>
-                      <p>License Plate: {selectedOrder.vehicle?.license_plate || 'N/A'}</p>
-                      <p>VIN: {selectedOrder.vehicle?.vin || 'N/A'}</p>
+                      <p><strong>{selectedOrder.year} {selectedOrder.make} {selectedOrder.model}</strong></p>
+                      <p>License Plate: {selectedOrder.license_plate || 'N/A'}</p>
                     </div>
                   </div>
                 </div>
@@ -390,7 +373,7 @@ export function Billing() {
                       )}
                       {orderParts.map((part) => (
                         <tr key={part.id}>
-                          <td className="border border-gray-300 px-4 py-2">{part.inventory_item?.name || 'Part'}</td>
+                          <td className="border border-gray-300 px-4 py-2">{part.name || 'Part'}</td>
                           <td className="border border-gray-300 px-4 py-2">{part.quantity_used}</td>
                           <td className="border border-gray-300 px-4 py-2">${part.unit_price.toFixed(2)}</td>
                           <td className="border border-gray-300 px-4 py-2">${(part.quantity_used * part.unit_price).toFixed(2)}</td>
