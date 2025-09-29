@@ -14,7 +14,7 @@ const authenticateToken = async (req, res, next) => {
     
     // Get user from database
     const result = await pool.query(
-      'SELECT id, email, name as full_name, role, phone FROM users WHERE id = $1',
+      'SELECT * FROM users WHERE id = $1',
       [decoded.userId]
     );
 
@@ -22,7 +22,14 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    req.user = result.rows[0];
+    const user = result.rows[0];
+    req.user = {
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name || user.name,
+      role: user.role,
+      phone: user.phone
+    };
     next();
   } catch (error) {
     return res.status(403).json({ error: 'Invalid or expired token' });

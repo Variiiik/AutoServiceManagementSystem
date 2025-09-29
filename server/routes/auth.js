@@ -32,11 +32,29 @@ router.post('/register', [
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Create user
-    const result = await pool.query(
-      'INSERT INTO users (email, password, name, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, name as full_name, role, phone',
-      [email, hashedPassword, fullName, role, phone]
-    );
+    // Create user - try different column combinations
+    let result;
+    try {
+      // Try with password_hash column first
+      result = await pool.query(
+        'INSERT INTO users (email, password_hash, full_name, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [email, hashedPassword, fullName, role, phone]
+      );
+    } catch (error) {
+      try {
+        // Try with password column
+        result = await pool.query(
+          'INSERT INTO users (email, password, name, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+          [email, hashedPassword, fullName, role, phone]
+        );
+      } catch (error2) {
+        // Try with different column names
+        result = await pool.query(
+          'INSERT INTO users (email, hashed_password, full_name, role, phone) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+          [email, hashedPassword, fullName, role, phone]
+        );
+      }
+    }
 
     const user = result.rows[0];
 
@@ -53,7 +71,7 @@ router.post('/register', [
       user: {
         id: user.id,
         email: user.email,
-        fullName: user.full_name,
+        fullName: user.full_name || user.name,
         role: user.role,
         phone: user.phone
       }
@@ -79,7 +97,7 @@ router.post('/login', [
 
     // Find user
     const result = await pool.query(
-      'SELECT id, email, password, name as full_name, role, phone FROM users WHERE email = $1',
+      'SELECT * FROM users WHERE email = $1',
       [email]
     );
 
@@ -90,7 +108,8 @@ router.post('/login', [
     const user = result.rows[0];
 
     // Check password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const passwordField = user.password_hash || user.password || user.hashed_password;
+    const isValidPassword = await bcrypt.compare(password, passwordField);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -108,7 +127,7 @@ router.post('/login', [
       user: {
         id: user.id,
         email: user.email,
-        fullName: user.full_name,
+        fullName: user.full_name || user.name,
         role: user.role,
         phone: user.phone
       }
