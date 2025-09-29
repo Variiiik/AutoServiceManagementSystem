@@ -70,20 +70,26 @@ router.post('/login', [
   body('password').exists()
 ], async (req, res) => {
   try {
+    console.log('🔍 Login attempt:', { email: req.body.email, hasPassword: !!req.body.password });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
     const { email, password } = req.body;
+    console.log('🔍 Looking for user:', email);
 
     // Find user
     const result = await pool.query(
       'SELECT id, user_id, email, full_name, role, phone, password_hash, created_at, updated_at FROM users WHERE email = $1',
       [email]
     );
+    console.log('🔍 User query result:', { found: result.rows.length, user: result.rows[0] ? { email: result.rows[0].email, hasPassword: !!result.rows[0].password_hash } : null });
 
     if (result.rows.length === 0) {
+      console.log('❌ User not found');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -91,15 +97,21 @@ router.post('/login', [
 
     // Check if password_hash exists
     if (!user.password_hash) {
+      console.log('❌ No password hash found for user');
       return res.status(401).json({ error: 'Account not properly configured' });
     }
 
+    console.log('🔍 Comparing passwords...');
     // Check password
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    console.log('🔍 Password valid:', isValidPassword);
+    
     if (!isValidPassword) {
+      console.log('❌ Invalid password');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    console.log('✅ Authentication successful, generating token...');
     // Generate JWT
     const token = jwt.sign(
       { userId: user.user_id || user.id, email: user.email, role: user.role },
@@ -107,6 +119,7 @@ router.post('/login', [
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
+    console.log('✅ Login successful for:', user.email);
     res.json({
       message: 'Login successful',
       token,
@@ -119,6 +132,7 @@ router.post('/login', [
       }
     });
   } catch (error) {
+    console.error('❌ Login error:', error);
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
