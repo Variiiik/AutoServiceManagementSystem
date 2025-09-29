@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { vehiclesAPI, customersAPI } from '../lib/api';
 import { Vehicle, Customer } from '../types';
 import { Plus, Search, Edit3, Trash2, Car } from 'lucide-react';
 
@@ -25,25 +25,13 @@ export function Vehicles() {
 
   const fetchData = async () => {
     try {
-      const [vehiclesRes, customersRes] = await Promise.all([
-        supabase
-          .from('vehicles')
-          .select(`
-            *,
-            customer:customers(*)
-          `)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('customers')
-          .select('*')
-          .order('name')
+      const [vehiclesResponse, customersResponse] = await Promise.all([
+        vehiclesAPI.getAll(),
+        customersAPI.getAll()
       ]);
 
-      if (vehiclesRes.error) throw vehiclesRes.error;
-      if (customersRes.error) throw customersRes.error;
-
-      setVehicles(vehiclesRes.data || []);
-      setCustomers(customersRes.data || []);
+      setVehicles(vehiclesResponse.data);
+      setCustomers(customersResponse.data);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -61,18 +49,9 @@ export function Vehicles() {
       };
 
       if (editingVehicle) {
-        const { error } = await supabase
-          .from('vehicles')
-          .update(vehicleData)
-          .eq('id', editingVehicle.id);
-        
-        if (error) throw error;
+        await vehiclesAPI.update(editingVehicle.id, vehicleData);
       } else {
-        const { error } = await supabase
-          .from('vehicles')
-          .insert(vehicleData);
-        
-        if (error) throw error;
+        await vehiclesAPI.create(vehicleData);
       }
       
       setShowModal(false);
@@ -108,12 +87,7 @@ export function Vehicles() {
     const vehicleLabel = `${vehicle.year || ''} ${vehicle.make} ${vehicle.model}`.trim();
     if (window.confirm(`Are you sure you want to delete ${vehicleLabel}?`)) {
       try {
-        const { error } = await supabase
-          .from('vehicles')
-          .delete()
-          .eq('id', vehicle.id);
-        
-        if (error) throw error;
+        await vehiclesAPI.delete(vehicle.id);
         fetchData();
       } catch (error) {
         console.error('Error deleting vehicle:', error);
@@ -192,7 +166,7 @@ export function Vehicles() {
             <div className="space-y-2">
               <div>
                 <span className="text-sm font-medium text-gray-700">Owner: </span>
-                <span className="text-sm text-gray-600">{vehicle.customer?.name}</span>
+                <span className="text-sm text-gray-600">{vehicle.customer_name}</span>
               </div>
               {vehicle.license_plate && (
                 <div>

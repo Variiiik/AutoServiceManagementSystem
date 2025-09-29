@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { workOrdersAPI, vehiclesAPI, inventoryAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
-import { WorkOrder, Vehicle, Customer, UserProfile, WorkOrderPart, InventoryItem } from '../types';
+import { WorkOrder, Vehicle, User, WorkOrderPart, InventoryItem } from '../types';
 import { Plus, Search, Edit3, Trash2, Eye, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 
 export function WorkOrders() {
-  const { profile } = useAuth();
+  const { user } = useAuth();
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [mechanics, setMechanics] = useState<UserProfile[]>([]);
+  const [mechanics, setMechanics] = useState<User[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,44 +34,17 @@ export function WorkOrders() {
 
   const fetchData = async () => {
     try {
-      const [ordersRes, vehiclesRes, mechanicsRes, inventoryRes] = await Promise.all([
-        supabase
-          .from('work_orders')
-          .select(`
-            *,
-            vehicle:vehicles(*,
-              customer:customers(*)
-            ),
-            customer:customers(*),
-            mechanic:user_profiles(*)
-          `)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('vehicles')
-          .select(`
-            *,
-            customer:customers(*)
-          `)
-          .order('make'),
-        supabase
-          .from('user_profiles')
-          .select('*')
-          .order('full_name'),
-        supabase
-          .from('inventory_items')
-          .select('*')
-          .order('name')
+      const [ordersResponse, vehiclesResponse, inventoryResponse] = await Promise.all([
+        workOrdersAPI.getAll(),
+        vehiclesAPI.getAll(),
+        inventoryAPI.getAll()
       ]);
 
-      if (ordersRes.error) throw ordersRes.error;
-      if (vehiclesRes.error) throw vehiclesRes.error;
-      if (mechanicsRes.error) throw mechanicsRes.error;
-      if (inventoryRes.error) throw inventoryRes.error;
-
-      setWorkOrders(ordersRes.data || []);
-      setVehicles(vehiclesRes.data || []);
-      setMechanics(mechanicsRes.data || []);
-      setInventory(inventoryRes.data || []);
+      setWorkOrders(ordersResponse.data);
+      setVehicles(vehiclesResponse.data);
+      setInventory(inventoryResponse.data);
+      // For now, we'll use an empty array for mechanics - this would come from a users API
+      setMechanics([]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -81,16 +54,8 @@ export function WorkOrders() {
 
   const fetchOrderParts = async (orderId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('work_order_parts')
-        .select(`
-          *,
-          inventory_item:inventory_items(*)
-        `)
-        .eq('work_order_id', orderId);
-
-      if (error) throw error;
-      setOrderParts(data || []);
+      const response = await workOrdersAPI.getParts(parseInt(orderId));
+      setOrderParts(response.data);
     } catch (error) {
       console.error('Error fetching order parts:', error);
     }
@@ -102,24 +67,15 @@ export function WorkOrders() {
     try {
       const orderData = {
         ...formData,
-        customer_id: vehicles.find(v => v.id === formData.vehicle_id)?.customer_id,
+        customer_id: vehicles.find(v => v.id.toString() === formData.vehicle_id)?.customer_id,
         labor_hours: formData.labor_hours ? parseFloat(formData.labor_hours) : 0,
         labor_rate: parseFloat(formData.labor_rate)
       };
 
       if (editingOrder) {
-        const { error } = await supabase
-          .from('work_orders')
-          .update(orderData)
-          .eq('id', editingOrder.id);
-        
-        if (error) throw error;
+        await workOrdersAPI.update(editingOrder.id, orderData);
       } else {
-        const { error } = await supabase
-          .from('work_orders')
-          .insert(orderData);
-        
-        if (error) throw error;
+        await workOrdersAPI.create(orderData);
       }
       
       setShowModal(false);
@@ -162,12 +118,7 @@ export function WorkOrders() {
   const handleDelete = async (order: WorkOrder) => {
     if (window.confirm(`Are you sure you want to delete work order "${order.title}"?`)) {
       try {
-        const { error } = await supabase
-          .from('work_orders')
-          .delete()
-          .eq('id', order.id);
-        
-        if (error) throw error;
+        await workOrdersAPI.delete(order.id);
         fetchData();
       } catch (error) {
         console.error('Error deleting work order:', error);
@@ -177,12 +128,7 @@ export function WorkOrders() {
 
   const updateOrderStatus = async (orderId: string, newStatus: 'pending' | 'in_progress' | 'completed') => {
     try {
-      const { error } = await supabase
-        .from('work_orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', orderId);
-      
-      if (error) throw error;
+      await workOrdersAPI.update(parseInt(orderId), { status: newStatus });
       fetchData();
     } catch (error) {
       console.error('Error updating status:', error);
@@ -208,20 +154,20 @@ export function WorkOrders() {
   };
 
   const canEditOrder = (order: WorkOrder) => {
-    return profile?.role === 'admin' || order.assigned_mechanic === profile?.id;
+    return user?.role === 'admin' || order.assigned_mechanic === user?.id;
   };
 
   const filteredOrders = workOrders
     .filter(order => {
       const matchesSearch = 
         order.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.vehicle?.make.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.vehicle?.model.toLowerCase().includes(searchTerm.toLowerCase());
+        order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.make?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.model?.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       
-      const matchesRole = profile?.role === 'admin' || order.assigned_mechanic === profile?.id;
+      const matchesRole = user?.role === 'admin' || order.assigned_mechanic === user?.id;
       
       return matchesSearch && matchesStatus && matchesRole;
     });
@@ -238,7 +184,7 @@ export function WorkOrders() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Work Orders</h1>
-        {profile?.role === 'admin' && (
+        {user?.role === 'admin' && (
           <button
             onClick={() => setShowModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
@@ -312,9 +258,9 @@ export function WorkOrders() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{order.customer?.name}</div>
+                      <div className="text-sm font-medium text-gray-900">{order.customer_name}</div>
                       <div className="text-sm text-gray-500">
-                        {order.vehicle?.year} {order.vehicle?.make} {order.vehicle?.model}
+                        {order.year} {order.make} {order.model}
                       </div>
                     </div>
                   </td>
@@ -335,7 +281,7 @@ export function WorkOrders() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {order.mechanic?.full_name || 'Unassigned'}
+                    {order.mechanic_name || 'Unassigned'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     ${order.total_amount.toFixed(2)}
@@ -356,7 +302,7 @@ export function WorkOrders() {
                           <Edit3 className="h-4 w-4" />
                         </button>
                       )}
-                      {profile?.role === 'admin' && (
+                      {user?.role === 'admin' && (
                         <button
                           onClick={() => handleDelete(order)}
                           className="text-red-600 hover:text-red-900"
@@ -401,7 +347,7 @@ export function WorkOrders() {
                   <option value="">Select a vehicle</option>
                   {vehicles.map((vehicle) => (
                     <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.customer?.name} - {vehicle.year} {vehicle.make} {vehicle.model}
+                      {vehicle.customer_name} - {vehicle.year} {vehicle.make} {vehicle.model}
                     </option>
                   ))}
                 </select>
@@ -522,12 +468,12 @@ export function WorkOrders() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h3 className="text-sm font-medium text-gray-700">Customer</h3>
-                  <p className="text-sm text-gray-900">{selectedOrder.customer?.name}</p>
+                  <p className="text-sm text-gray-900">{selectedOrder.customer_name}</p>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-700">Vehicle</h3>
                   <p className="text-sm text-gray-900">
-                    {selectedOrder.vehicle?.year} {selectedOrder.vehicle?.make} {selectedOrder.vehicle?.model}
+                    {selectedOrder.year} {selectedOrder.make} {selectedOrder.model}
                   </p>
                 </div>
               </div>
@@ -546,7 +492,7 @@ export function WorkOrders() {
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-700">Assigned Mechanic</h3>
-                  <p className="text-sm text-gray-900">{selectedOrder.mechanic?.full_name || 'Unassigned'}</p>
+                  <p className="text-sm text-gray-900">{selectedOrder.mechanic_name || 'Unassigned'}</p>
                 </div>
               </div>
               
@@ -572,7 +518,7 @@ export function WorkOrders() {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part</th>
+                          <td className="px-4 py-2 text-sm text-gray-900">{part.name}</td>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>

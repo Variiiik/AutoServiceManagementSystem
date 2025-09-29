@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { Appointment, Vehicle, UserProfile } from '../types';
+import { appointmentsAPI, vehiclesAPI } from '../lib/api';
+import { Appointment, Vehicle, User } from '../types';
 import { Plus, Search, Edit3, Trash2, Calendar, Clock } from 'lucide-react';
 
 export function Appointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [mechanics, setMechanics] = useState<UserProfile[]>([]);
+  const [mechanics, setMechanics] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -28,38 +28,15 @@ export function Appointments() {
 
   const fetchData = async () => {
     try {
-      const [appointmentsRes, vehiclesRes, mechanicsRes] = await Promise.all([
-        supabase
-          .from('appointments')
-          .select(`
-            *,
-            customer:customers(*),
-            vehicle:vehicles(*,
-              customer:customers(*)
-            ),
-            mechanic:user_profiles(*)
-          `)
-          .order('appointment_date'),
-        supabase
-          .from('vehicles')
-          .select(`
-            *,
-            customer:customers(*)
-          `)
-          .order('make'),
-        supabase
-          .from('user_profiles')
-          .select('*')
-          .order('full_name')
+      const [appointmentsResponse, vehiclesResponse] = await Promise.all([
+        appointmentsAPI.getAll(),
+        vehiclesAPI.getAll()
       ]);
 
-      if (appointmentsRes.error) throw appointmentsRes.error;
-      if (vehiclesRes.error) throw vehiclesRes.error;
-      if (mechanicsRes.error) throw mechanicsRes.error;
-
-      setAppointments(appointmentsRes.data || []);
-      setVehicles(vehiclesRes.data || []);
-      setMechanics(mechanicsRes.data || []);
+      setAppointments(appointmentsResponse.data);
+      setVehicles(vehiclesResponse.data);
+      // For now, we'll use an empty array for mechanics - this would come from a users API
+      setMechanics([]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -76,7 +53,7 @@ export function Appointments() {
       
       const appointmentData = {
         vehicle_id: formData.vehicle_id,
-        customer_id: vehicles.find(v => v.id === formData.vehicle_id)?.customer_id,
+        customer_id: vehicles.find(v => v.id.toString() === formData.vehicle_id)?.customer_id,
         appointment_date: appointmentDateTime.toISOString(),
         duration: durationInterval,
         description: formData.description,
@@ -85,18 +62,9 @@ export function Appointments() {
       };
 
       if (editingAppointment) {
-        const { error } = await supabase
-          .from('appointments')
-          .update(appointmentData)
-          .eq('id', editingAppointment.id);
-        
-        if (error) throw error;
+        await appointmentsAPI.update(editingAppointment.id, appointmentData);
       } else {
-        const { error } = await supabase
-          .from('appointments')
-          .insert(appointmentData);
-        
-        if (error) throw error;
+        await appointmentsAPI.create(appointmentData);
       }
       
       setShowModal(false);
@@ -132,15 +100,10 @@ export function Appointments() {
   };
 
   const handleDelete = async (appointment: Appointment) => {
-    const appointmentLabel = `${appointment.customer?.name} - ${new Date(appointment.appointment_date).toLocaleDateString()}`;
+    const appointmentLabel = `${appointment.customer_name} - ${new Date(appointment.appointment_date).toLocaleDateString()}`;
     if (window.confirm(`Are you sure you want to delete the appointment for ${appointmentLabel}?`)) {
       try {
-        const { error } = await supabase
-          .from('appointments')
-          .delete()
-          .eq('id', appointment.id);
-        
-        if (error) throw error;
+        await appointmentsAPI.delete(appointment.id);
         fetchData();
       } catch (error) {
         console.error('Error deleting appointment:', error);
@@ -150,12 +113,7 @@ export function Appointments() {
 
   const updateAppointmentStatus = async (appointmentId: string, newStatus: 'scheduled' | 'confirmed' | 'completed' | 'cancelled') => {
     try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status: newStatus })
-        .eq('id', appointmentId);
-      
-      if (error) throw error;
+      await appointmentsAPI.updateStatus(parseInt(appointmentId), newStatus);
       fetchData();
     } catch (error) {
       console.error('Error updating status:', error);
@@ -178,9 +136,9 @@ export function Appointments() {
 
   const filteredAppointments = appointments.filter(appointment => {
     const matchesSearch = 
-      appointment.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      appointment.vehicle?.make.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      appointment.vehicle?.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      appointment.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      appointment.make?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      appointment.model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       appointment.description?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter;
@@ -228,7 +186,7 @@ export function Appointments() {
             <div className="text-sm text-blue-700">
               {todayAppointments.slice(0, 3).map(apt => (
                 <div key={apt.id} className="mb-1">
-                  {new Date(apt.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {apt.customer?.name} ({apt.vehicle?.make} {apt.vehicle?.model})
+                  {new Date(apt.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {apt.customer_name} ({apt.make} {apt.model})
                 </div>
               ))}
               {todayAppointments.length > 3 && <div>and {todayAppointments.length - 3} more...</div>}
@@ -309,9 +267,9 @@ export function Appointments() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{appointment.customer?.name}</div>
+                      <div className="text-sm font-medium text-gray-900">{appointment.customer_name}</div>
                       <div className="text-sm text-gray-500">
-                        {appointment.vehicle?.year} {appointment.vehicle?.make} {appointment.vehicle?.model}
+                        {appointment.year} {appointment.make} {appointment.model}
                       </div>
                     </div>
                   </td>
@@ -321,7 +279,7 @@ export function Appointments() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {appointment.mechanic?.full_name || 'Unassigned'}
+                    {appointment.mechanic_name || 'Unassigned'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
@@ -386,7 +344,7 @@ export function Appointments() {
                   <option value="">Select a vehicle</option>
                   {vehicles.map((vehicle) => (
                     <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.customer?.name} - {vehicle.year} {vehicle.make} {vehicle.model}
+                      {vehicle.customer_name} - {vehicle.year} {vehicle.make} {vehicle.model}
                     </option>
                   ))}
                 </select>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { inventoryAPI } from '../lib/api';
 import { InventoryItem } from '../types';
 import { Plus, Search, Edit3, Trash2, Package, AlertTriangle } from 'lucide-react';
 
@@ -23,15 +23,9 @@ export function Inventory() {
 
   const fetchInventory = async () => {
     try {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      
+      const response = await inventoryAPI.getAll();
       // Add low stock indicator
-      const itemsWithLowStock = (data || []).map(item => ({
+      const itemsWithLowStock = response.data.map(item => ({
         ...item,
         is_low_stock: item.stock_quantity <= item.min_stock_level
       }));
@@ -57,18 +51,9 @@ export function Inventory() {
       };
 
       if (editingItem) {
-        const { error } = await supabase
-          .from('inventory_items')
-          .update(itemData)
-          .eq('id', editingItem.id);
-        
-        if (error) throw error;
+        await inventoryAPI.update(editingItem.id, itemData);
       } else {
-        const { error } = await supabase
-          .from('inventory_items')
-          .insert(itemData);
-        
-        if (error) throw error;
+        await inventoryAPI.create(itemData);
       }
       
       setShowModal(false);
@@ -101,12 +86,7 @@ export function Inventory() {
   const handleDelete = async (item: InventoryItem) => {
     if (window.confirm(`Are you sure you want to delete ${item.name}?`)) {
       try {
-        const { error } = await supabase
-          .from('inventory_items')
-          .delete()
-          .eq('id', item.id);
-        
-        if (error) throw error;
+        await inventoryAPI.delete(item.id);
         fetchInventory();
       } catch (error) {
         console.error('Error deleting inventory item:', error);
@@ -116,12 +96,7 @@ export function Inventory() {
 
   const updateStock = async (itemId: string, newQuantity: number) => {
     try {
-      const { error } = await supabase
-        .from('inventory_items')
-        .update({ stock_quantity: newQuantity })
-        .eq('id', itemId);
-      
-      if (error) throw error;
+      await inventoryAPI.updateStock(parseInt(itemId), newQuantity);
       fetchInventory();
     } catch (error) {
       console.error('Error updating stock:', error);

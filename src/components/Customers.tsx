@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { customersAPI } from '../lib/api';
 import { Customer } from '../types';
 import { Plus, Search, Edit3, Trash2, Phone, Mail, MapPin } from 'lucide-react';
 
@@ -22,13 +22,8 @@ export function Customers() {
 
   const fetchCustomers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      setCustomers(data || []);
+      const response = await customersAPI.getAll();
+      setCustomers(response.data);
     } catch (error) {
       console.error('Error fetching customers:', error);
     } finally {
@@ -41,18 +36,9 @@ export function Customers() {
     
     try {
       if (editingCustomer) {
-        const { error } = await supabase
-          .from('customers')
-          .update(formData)
-          .eq('id', editingCustomer.id);
-        
-        if (error) throw error;
+        await customersAPI.update(editingCustomer.id, formData);
       } else {
-        const { error } = await supabase
-          .from('customers')
-          .insert(formData);
-        
-        if (error) throw error;
+        await customersAPI.create(formData);
       }
       
       setShowModal(false);
@@ -78,12 +64,7 @@ export function Customers() {
   const handleDelete = async (customer: Customer) => {
     if (window.confirm(`Are you sure you want to delete ${customer.name}?`)) {
       try {
-        const { error } = await supabase
-          .from('customers')
-          .delete()
-          .eq('id', customer.id);
-        
-        if (error) throw error;
+        await customersAPI.delete(customer.id);
         fetchCustomers();
       } catch (error) {
         console.error('Error deleting customer:', error);

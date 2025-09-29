@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { dashboardAPI, workOrdersAPI, appointmentsAPI, inventoryAPI } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
-import { WorkOrder, InventoryItem, Appointment } from '../types';
+import { WorkOrder, InventoryItem, Appointment, DashboardStats } from '../types';
 import { 
   Wrench, 
   Users, 
@@ -15,15 +15,17 @@ import {
 } from 'lucide-react';
 
 export function Dashboard() {
-  const { profile } = useAuth();
-  const [stats, setStats] = useState({
+  const { user } = useAuth();
+  const [stats, setStats] = useState<DashboardStats>({
     totalCustomers: 0,
     totalVehicles: 0,
     pendingOrders: 0,
     inProgressOrders: 0,
     completedOrders: 0,
+    totalInventoryItems: 0,
     lowStockItems: 0,
-    todayAppointments: 0
+    todayAppointments: 0,
+    totalAppointments: 0
   });
   const [recentOrders, setRecentOrders] = useState<WorkOrder[]>([]);
   const [lowStockItems, setLowStockItems] = useState<InventoryItem[]>([]);
@@ -36,68 +38,17 @@ export function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch basic stats
-      const [customersRes, vehiclesRes, ordersRes, inventoryRes, appointmentsRes] = await Promise.all([
-        supabase.from('customers').select('id'),
-        supabase.from('vehicles').select('id'),
-        supabase.from('work_orders').select('id, status'),
-        supabase.from('inventory_items').select('*'),
-        supabase.from('appointments').select('*')
+      const [statsRes, recentOrdersRes, todayApptsRes, lowStockRes] = await Promise.all([
+        dashboardAPI.getStats(),
+        dashboardAPI.getRecentOrders(),
+        dashboardAPI.getTodayAppointments(),
+        dashboardAPI.getLowStock()
       ]);
 
-      const orders = ordersRes.data || [];
-      const inventory = inventoryRes.data || [];
-      const appointments = appointmentsRes.data || [];
-
-      // Calculate stats
-      const today = new Date().toISOString().split('T')[0];
-      const todayAppts = appointments.filter(apt => 
-        new Date(apt.appointment_date).toISOString().split('T')[0] === today
-      );
-
-      const lowStock = inventory.filter(item => 
-        item.stock_quantity <= item.min_stock_level
-      );
-
-      setStats({
-        totalCustomers: customersRes.data?.length || 0,
-        totalVehicles: vehiclesRes.data?.length || 0,
-        pendingOrders: orders.filter(o => o.status === 'pending').length,
-        inProgressOrders: orders.filter(o => o.status === 'in_progress').length,
-        completedOrders: orders.filter(o => o.status === 'completed').length,
-        lowStockItems: lowStock.length,
-        todayAppointments: todayAppts.length
-      });
-
-      // Fetch recent orders with related data
-      const { data: recentOrdersData } = await supabase
-        .from('work_orders')
-        .select(`
-          *,
-          customer:customers(*),
-          vehicle:vehicles(*),
-          mechanic:user_profiles(*)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      setRecentOrders(recentOrdersData || []);
-      setLowStockItems(lowStock.slice(0, 5));
-
-      // Fetch today's appointments
-      const { data: todayApptsData } = await supabase
-        .from('appointments')
-        .select(`
-          *,
-          customer:customers(*),
-          vehicle:vehicles(*),
-          mechanic:user_profiles(*)
-        `)
-        .gte('appointment_date', `${today}T00:00:00`)
-        .lt('appointment_date', `${today}T23:59:59`)
-        .order('appointment_date');
-
-      setTodayAppointments(todayApptsData || []);
+      setStats(statsRes.data);
+      setRecentOrders(recentOrdersRes.data);
+      setTodayAppointments(todayApptsRes.data);
+      setLowStockItems(lowStockRes.data);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -127,7 +78,7 @@ export function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">
-          Welcome back, {profile?.full_name}
+          Welcome back, {user?.fullName}
         </h1>
         <p className="text-gray-600 mt-2">Here's what's happening in your auto service shop today.</p>
       </div>
@@ -224,7 +175,7 @@ export function Dashboard() {
           {stats.lowStockItems > 0 ? (
             <div className="space-y-2">
               <div className="flex items-center text-red-600">
-                <AlertTriangle className="h-4 w-4 mr-2" />
+                      {appointment.customer_name} - {appointment.make} {appointment.model}
                 <span className="text-sm font-medium">{stats.lowStockItems} items low in stock</span>
               </div>
               {lowStockItems.slice(0, 3).map((item) => (
