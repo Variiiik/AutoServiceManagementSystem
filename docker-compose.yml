@@ -11,33 +11,51 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./server/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
     ports:
-      - "5432:5432"
+      - "192.168.2.10:5432:5432"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+      - auto-service-network
 
-  auto-service-app:
-    build: .
+  backend:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
     ports:
-      - "3000:80"
-      - "5000:5000"
+      - "192.168.2.10:5000:5000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/auto_service_db
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/auto_service_db?sslmode=disable
       - JWT_SECRET=auto-service-super-secret-jwt-key-2024
       - FRONTEND_URL=http://192.168.2.10:3000
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    container_name: auto-service-management
+    networks:
+      - auto-service-network
+
+  frontend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "192.168.2.10:3000:80"
+    environment:
+      - VITE_API_URL=http://192.168.2.10:5000/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - auto-service-network
 
 volumes:
   postgres_data:
 
 networks:
-  default:
-    name: auto-service-network
+  auto-service-network:
+    driver: bridge

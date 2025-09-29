@@ -1,57 +1,36 @@
-import React, { useState } from 'react';
-import { AuthContext, useAuthProvider } from './hooks/useAuth';
-import { Auth } from './components/Auth';
-import { Layout } from './components/Layout';
-import { Dashboard } from './components/Dashboard';
-import { Customers } from './components/Customers';
-import { Vehicles } from './components/Vehicles';
-import { WorkOrders } from './components/WorkOrders';
-import { Inventory } from './components/Inventory';
-import { Appointments } from './components/Appointments';
-import { Billing } from './components/Billing';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { LoginPage } from './pages/LoginPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { CustomersPage } from './pages/CustomersPage';
+import { VehiclesPage } from './pages/VehiclesPage';
+import { WorkOrdersPage } from './pages/WorkOrdersPage';
+import { InventoryPage } from './pages/InventoryPage';
+import { AppointmentsPage } from './pages/AppointmentsPage';
+import { BillingPage } from './pages/BillingPage';
+import { Layout } from './components/layout/Layout';
 
 function App() {
-  const auth = useAuthProvider();
-  const [currentPage, setCurrentPage] = useState('dashboard');
-
-  if (auth.loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="text-gray-600">Loading AutoService Pro...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!auth.user) {
-    return (
-      <AuthContext.Provider value={auth}>
-        <Auth />
-      </AuthContext.Provider>
-    );
-  }
-
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'dashboard': return <Dashboard />;
-      case 'customers': return <Customers />;
-      case 'vehicles': return <Vehicles />;
-      case 'work-orders': return <WorkOrders />;
-      case 'inventory': return <Inventory />;
-      case 'appointments': return <Appointments />;
-      case 'billing': return <Billing />;
-      default: return <Dashboard />;
-    }
-  };
-
   return (
-    <AuthContext.Provider value={auth}>
-      <Layout currentPage={currentPage} onPageChange={setCurrentPage}>
-        {renderPage()}
-      </Layout>
-    </AuthContext.Provider>
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="customers" element={<CustomersPage />} />
+            <Route path="vehicles" element={<VehiclesPage />} />
+            <Route path="work-orders" element={<WorkOrdersPage />} />
+            <Route path="inventory" element={<InventoryPage />} />
+            <Route path="appointments" element={<AppointmentsPage />} />
+            <Route path="billing" element={<BillingPage />} />
+          </Route>
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 

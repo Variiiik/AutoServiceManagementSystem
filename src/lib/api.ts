@@ -2,7 +2,6 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.2.10:5000/api';
 
-// Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -10,7 +9,7 @@ const api = axios.create({
   },
 });
 
-// Add auth token to requests
+// Request interceptor to add auth token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token');
   if (token) {
@@ -19,31 +18,33 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle auth errors
+// Response interceptor to handle auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_data');
-      window.location.href = '/';
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
 );
-
-export default api;
 
 // Auth API
 export const authAPI = {
   login: (email: string, password: string) =>
     api.post('/auth/login', { email, password }),
   
-  register: (email: string, password: string, fullName: string, role: string, phone?: string) =>
-    api.post('/auth/register', { email, password, fullName, role, phone }),
+  register: (data: {
+    email: string;
+    password: string;
+    fullName: string;
+    role: string;
+    phone?: string;
+  }) => api.post('/auth/register', data),
   
-  getCurrentUser: () =>
-    api.get('/auth/me'),
+  getCurrentUser: () => api.get('/auth/me'),
 };
 
 // Customers API
@@ -104,3 +105,5 @@ export const dashboardAPI = {
   getTodayAppointments: () => api.get('/dashboard/today-appointments'),
   getLowStock: () => api.get('/dashboard/low-stock'),
 };
+
+export default api;
