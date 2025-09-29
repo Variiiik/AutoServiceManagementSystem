@@ -57,12 +57,37 @@ router.get('/:id', authenticateToken, async (req, res) => {
 router.post('/', [
   authenticateToken,
   requireRole(['admin']),
-  body('customer_id').isInt({ min: 1 }),
-  body('vehicle_id').isInt({ min: 1 }),
+  body('customer_id').custom((value) => {
+    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return true;
+    }
+    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
+      return true;
+    }
+    throw new Error('Invalid customer_id format');
+  }),
+  body('vehicle_id').custom((value) => {
+    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return true;
+    }
+    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
+      return true;
+    }
+    throw new Error('Invalid vehicle_id format');
+  }),
   body('appointment_date').isISO8601(),
   body('duration').optional().matches(/^\d+:\d{2}:\d{2}$|^\d+ hours?$/),
   body('description').optional().trim(),
-  body('assigned_mechanic').optional().isInt({ min: 1 })
+  body('assigned_mechanic').optional().custom((value) => {
+    if (!value) return true;
+    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return true;
+    }
+    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
+      return true;
+    }
+    throw new Error('Invalid assigned_mechanic format');
+  })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -95,12 +120,39 @@ router.post('/', [
 router.put('/:id', [
   authenticateToken,
   requireRole(['admin']),
-  body('customer_id').optional().isInt({ min: 1 }),
-  body('vehicle_id').optional().isInt({ min: 1 }),
+  body('customer_id').optional().custom((value) => {
+    if (!value) return true;
+    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return true;
+    }
+    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
+      return true;
+    }
+    throw new Error('Invalid customer_id format');
+  }),
+  body('vehicle_id').optional().custom((value) => {
+    if (!value) return true;
+    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return true;
+    }
+    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
+      return true;
+    }
+    throw new Error('Invalid vehicle_id format');
+  }),
   body('appointment_date').optional().isISO8601(),
   body('duration').optional().matches(/^\d+:\d{2}:\d{2}$|^\d+ hours?$/),
   body('description').optional().trim(),
-  body('assigned_mechanic').optional().isInt({ min: 1 }),
+  body('assigned_mechanic').optional().custom((value) => {
+    if (!value) return true;
+    if (typeof value === 'string' && value.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      return true;
+    }
+    if (Number.isInteger(parseInt(value)) && parseInt(value) > 0) {
+      return true;
+    }
+    throw new Error('Invalid assigned_mechanic format');
+  }),
   body('status').optional().isIn(['scheduled', 'confirmed', 'completed', 'cancelled'])
 ], async (req, res) => {
   try {

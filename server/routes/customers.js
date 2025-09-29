@@ -40,7 +40,7 @@ router.post('/', [
   authenticateToken,
   requireRole(['admin']),
   body('name').trim().isLength({ min: 2 }),
-  body('email').optional().isEmail().normalizeEmail(),
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail().normalizeEmail(),
   body('phone').optional().trim(),
   body('address').optional().trim()
 ], async (req, res) => {
@@ -69,7 +69,7 @@ router.put('/:id', [
   authenticateToken,
   requireRole(['admin']),
   body('name').trim().isLength({ min: 2 }),
-  body('email').optional().isEmail().normalizeEmail(),
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail().normalizeEmail(),
   body('phone').optional().trim(),
   body('address').optional().trim()
 ], async (req, res) => {
