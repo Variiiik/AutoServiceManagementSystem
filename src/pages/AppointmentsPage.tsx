@@ -1,163 +1,171 @@
-import React, { useState, useEffect } from 'react';
-import { appointmentsAPI, vehiclesAPI, customersAPI } from '../lib/api';
-import { useAuth } from '../contexts/AuthContext';
-import { Appointment, Vehicle, Customer } from '../types';
-import { Plus, Search, CreditCard as Edit3, Trash2, Calendar, Clock } from 'lucide-react';
-import toast from 'react-hot-toast';
+import React, { useEffect, useMemo, useState } from "react";
+import { appointmentsAPI, vehiclesAPI, customersAPI } from "../lib/api";
+import { useAuth } from "../contexts/AuthContext";
+import { Plus, Calendar as CalIcon, List, Trash2, Edit3, Upload } from "lucide-react";
+import toast from "react-hot-toast";
+import CalendarView from "../components/CalendarView";
+import AppointmentForm from "../components/AppointmentForm";
+import { normalizePlate } from '../lib/api';
 
-export const AppointmentsPage: React.FC = () => {
+function combineLocal(dateYYYYMMDD, timeHHMM) {
+  const [y,m,d] = dateYYYYMMDD.split("-").map(Number);
+  const [hh,mm] = timeHHMM.split(":").map(Number);
+  const dt = new Date(y, m-1, d, hh, mm, 0);
+  return dt.toISOString();
+}
+
+export const AppointmentsPage = () => {
   const { user } = useAuth();
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [view, setView] = useState("calendar"); // 'calendar' | 'list'
+  const [appointments, setAppointments] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [showModal, setShowModal] = useState(false);
-  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
-  const [formData, setFormData] = useState({
-    vehicle_id: '',
-    appointment_date: '',
-    appointment_time: '',
-    duration: '2',
-    description: '',
-    status: 'scheduled' as const
-  });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [presetDate, setPresetDate] = useState(""); // yyyy-mm-dd
+  const [presetTime, setPresetTime] = useState("09:00");
 
-  const fetchData = async () => {
-    try {
-      const [appointmentsResponse, vehiclesResponse, customersResponse] = await Promise.all([
-        appointmentsAPI.getAll(),
-        vehiclesAPI.getAll(),
-        customersAPI.getAll()
-      ]);
+  const [monthCursor, setMonthCursor] = useState(()=> new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
 
-      setAppointments(appointmentsResponse.data);
-      setVehicles(vehiclesResponse.data);
-      setCustomers(customersResponse.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast.error('Failed to load data');
-    } finally {
+  useEffect(()=>{ loadAll(); }, []);
+  async function loadAll(){
+    try{
+      setLoading(true);
+      const [a,v,c] = await Promise.all([appointmentsAPI.getAll(), vehiclesAPI.getAll(), customersAPI.getAll()]);
+      setAppointments(a.data || []);
+      setVehicles(v.data || []);
+      setCustomers(c.data || []);
+    }catch(e){
+      console.error(e); toast.error("Failed to load data");
+    }finally{
       setLoading(false);
     }
-  };
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  function handleQuickAdd(dateIsoYYYYMMDD, timeHHMM){
+    setPresetDate(dateIsoYYYYMMDD);
+    setPresetTime(timeHHMM);
+    setEditTarget(null);
+    setModalOpen(true);
+  }
+
+  async function ensureVehicleExists(form){
+    const wanted = normalizePlate(form.plate);
+    // 1) front-cache
+    let v = vehicles.find(x => normalizePlate(x.plate ?? x.license_plate) === wanted);
+    if (v) return v;
+
+    // 2) backend otsing (kui olemas libis)
     try {
-      const appointmentDateTime = new Date(`${formData.appointment_date}T${formData.appointment_time}`);
-      const durationInterval = `${formData.duration} hours`;
-      
-      const appointmentData = {
-        vehicle_id: parseInt(formData.vehicle_id),
-        customer_id: vehicles.find(v => v.id.toString() === formData.vehicle_id)?.customer_id,
-        appointment_date: appointmentDateTime.toISOString(),
-        duration: durationInterval,
-        description: formData.description,
-        status: formData.status
+      if (vehiclesAPI.findByPlate) {
+        const r = await vehiclesAPI.findByPlate(wanted);
+        if (r?.data) {
+          v = r.data;
+          setVehicles(prev => [v, ...prev]);
+          return v;
+        }
+      }
+    } catch(_) {}
+
+    // 3) loo auto (kui lubatud ja klient valitud)
+    if (form.__createIfMissing) {
+      if (!form.customer_id) throw new Error("Vali klient, et uut autot luua.");
+      const payload = {
+        plate: wanted,
+        customer_id: form.customer_id,
+        make: form.make || null,
+        model: form.model || null,
+        year: form.year ? parseInt(form.year,10) : null,
       };
-
-      if (editingAppointment) {
-        await appointmentsAPI.update(editingAppointment.id, appointmentData);
-        toast.success('Appointment updated successfully');
-      } else {
-        await appointmentsAPI.create(appointmentData);
-        toast.success('Appointment scheduled successfully');
-      }
-      
-      setShowModal(false);
-      setEditingAppointment(null);
-      setFormData({
-        vehicle_id: '',
-        appointment_date: '',
-        appointment_time: '',
-        duration: '2',
-        description: '',
-        status: 'scheduled'
-      });
-      fetchData();
-    } catch (error) {
-      console.error('Error saving appointment:', error);
-      toast.error('Failed to save appointment');
+      const created = await vehiclesAPI.create(payload);
+      v = created.data || created;
+      setVehicles(prev => [v, ...prev]);
+      return v;
     }
-  };
 
-  const handleEdit = (appointment: Appointment) => {
-    setEditingAppointment(appointment);
-    const appointmentDate = new Date(appointment.appointment_date);
-    setFormData({
-      vehicle_id: appointment.vehicle_id.toString(),
-      appointment_date: appointmentDate.toISOString().split('T')[0],
-      appointment_time: appointmentDate.toTimeString().slice(0, 5),
-      duration: appointment.duration.replace(' hours', '').replace(':00:00', ''),
-      description: appointment.description || '',
-      status: appointment.status
-    });
-    setShowModal(true);
-  };
+    throw new Error("Sellise autonumbriga sõidukit ei leitud");
+  }
 
-  const handleDelete = async (appointment: Appointment) => {
-    const appointmentLabel = `${appointment.customer_name} - ${new Date(appointment.appointment_date).toLocaleDateString()}`;
-    if (window.confirm(`Are you sure you want to delete the appointment for ${appointmentLabel}?`)) {
-      try {
-        await appointmentsAPI.delete(appointment.id);
-        toast.success('Appointment deleted successfully');
-        fetchData();
-      } catch (error) {
-        console.error('Error deleting appointment:', error);
-        toast.error('Failed to delete appointment');
-      }
-    }
-  };
+  async function saveNew(form){
+    try{
+      const v = await ensureVehicleExists(form);
+      const composedTitle = [
+        (v.customer_name || form.customer_id_name || ''), // kui sul on valikust nimi
+        [v.license_plate, v.make, v.model, v.year].filter(Boolean).join(' ')
+        ].filter(Boolean).join(': ').trim() || 'Service appointment';
 
-  const updateAppointmentStatus = async (appointmentId: number, newStatus: 'scheduled' | 'confirmed' | 'completed' | 'cancelled') => {
-    try {
-      await appointmentsAPI.updateStatus(appointmentId, newStatus);
-      toast.success('Status updated successfully');
-      fetchData();
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Failed to update status');
-    }
-  };
+      const payload = {
+        vehicle_id: v.id,
+        customer_id: v.customer_id || form.customer_id || null,
+        appointment_date: combineLocal(form.date, form.time),
+        duration: "2 hours",
+        description: form.description || "",
+        status: "scheduled",
+        title: composedTitle,
+      };
+      await appointmentsAPI.create(payload);
+      toast.success("Appointment created");
+      setModalOpen(false);
+      setEditTarget(null);
+      setPresetDate("");
+      await loadAll();
+    }catch(e){ console.error(e); toast.error(e.message || "Save failed"); }
+  }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'scheduled': return 'text-blue-600 bg-blue-100';
-      case 'confirmed': return 'text-green-600 bg-green-100';
-      case 'completed': return 'text-gray-600 bg-gray-100';
-      case 'cancelled': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
+  async function saveEdit(form){
+    try{
+      const v = await ensureVehicleExists(form);
+      const composedTitle = [
+        (v.customer_name || ''),
+        [v.license_plate, v.make, v.model, v.year].filter(Boolean).join(' ')
+        ].filter(Boolean).join(': ').trim() || 'Service appointment';
 
-  const isOverdue = (appointmentDate: string) => {
-    return new Date(appointmentDate) < new Date();
-  };
+      const payload = {
+        vehicle_id: v.id,
+        customer_id: v.customer_id || form.customer_id || null,
+        appointment_date: combineLocal(form.date, form.time),
+        description: form.description || "",
+        title: composedTitle,
+      };
+      await appointmentsAPI.update(editTarget.id, payload);
+      toast.success("Appointment updated");
+      setModalOpen(false);
+      setEditTarget(null);
+      await loadAll();
+    }catch(e){ console.error(e); toast.error(e.message || "Update failed"); }
+  }
 
-  const filteredAppointments = appointments.filter(appointment => {
-    const matchesSearch = 
-      appointment.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      appointment.make?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      appointment.model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      appointment.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  function openNew(){
+    setPresetDate("");
+    setPresetTime("09:00");
+    setEditTarget(null);
+    setModalOpen(true);
+  }
 
-  const todayAppointments = appointments.filter(apt => {
-    const today = new Date().toISOString().split('T')[0];
-    const aptDate = new Date(apt.appointment_date).toISOString().split('T')[0];
-    return aptDate === today;
-  });
+  function editApt(a){
+    const d = new Date(a.appointment_date);
+    const pad = (n)=>String(n).padStart(2,"0");
+    setEditTarget(a);
+    setPresetDate(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`);
+    setPresetTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    setModalOpen(true);
+  }
+
+  async function delApt(a){
+    if (!window.confirm("Kustutan broneeringu?")) return;
+    try{
+      await appointmentsAPI.delete(a.id);
+      toast.success("Deleted");
+      await loadAll();
+    }catch(e){ console.error(e); toast.error("Delete failed"); }
+  }
+
+  const listSorted = useMemo(()=> {
+    return [...appointments].sort((a,b)=> new Date(a.appointment_date) - new Date(b.appointment_date));
+  }, [appointments]);
 
   if (loading) {
     return (
@@ -169,287 +177,149 @@ export const AppointmentsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header + view switch */}
+      <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Appointments</h1>
-        {user?.role === 'admin' && (
+        <div className="flex gap-2">
           <button
-            onClick={() => setShowModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+            className={`px-3 py-2 rounded-lg border ${view==='calendar'?'bg-gray-100':''}`}
+            onClick={()=>setView("calendar")}
+            title="Calendar view"
           >
-            <Plus className="h-4 w-4" />
-            <span>Schedule Appointment</span>
+            <CalIcon className="w-4 h-4" />
           </button>
-        )}
+          <button
+            className={`px-3 py-2 rounded-lg border ${view==='list'?'bg-gray-100':''}`}
+            onClick={()=>setView("list")}
+            title="List view"
+          >
+            <List className="w-4 h-4" />
+          </button>
+          {user?.role === "admin" && (
+            <button
+              onClick={openNew}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New
+            </button>
+          )}
+          <a
+            href={`${import.meta.env.VITE_API_BASE || "http://localhost:3001"}/api/appointments/ics`}
+            className="px-3 py-2 rounded-lg border flex items-center gap-2"
+            title="Export all as .ics (Outlook)"
+          >
+            <Upload className="w-4 h-4" /> Export .ics
+          </a>
+        </div>
       </div>
 
-      {/* Today's Appointments Alert */}
-      {todayAppointments.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <Calendar className="h-5 w-5 text-blue-600 mr-2" />
-            <h3 className="text-sm font-medium text-blue-800">
-              Today's Schedule - {todayAppointments.length} appointment{todayAppointments.length > 1 ? 's' : ''}
-            </h3>
-          </div>
-          <div className="mt-2">
-            <div className="text-sm text-blue-700">
-              {todayAppointments.slice(0, 3).map(apt => (
-                <div key={apt.id} className="mb-1">
-                  {new Date(apt.appointment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {apt.customer_name} ({apt.make} {apt.model})
-                </div>
-              ))}
-              {todayAppointments.length > 3 && <div>and {todayAppointments.length - 3} more...</div>}
+      {/* Calendar */}
+      {view === "calendar" && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-1 rounded border" onClick={()=>setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth()-1, 1))}>Prev</button>
+            <div className="font-semibold">
+              {monthCursor.toLocaleString(undefined, { month:'long', year:'numeric' })}
             </div>
+            <button className="px-3 py-1 rounded border" onClick={()=>setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth()+1, 1))}>Next</button>
+            <button className="px-3 py-1 rounded border ml-auto" onClick={()=>{ setMonthCursor(new Date()); setSelectedDate(new Date()); }}>Today</button>
           </div>
+
+          <CalendarView
+            value={monthCursor}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            appointments={appointments}
+            onQuickAdd={handleQuickAdd}
+            onEventClick={editApt}
+          />
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search appointments..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        >
-          <option value="all">All Status</option>
-          <option value="scheduled">Scheduled</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-      </div>
-
-      {/* Appointments List */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date & Time
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer & Vehicle
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                {user?.role === 'admin' && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredAppointments.map((appointment) => (
-                <tr key={appointment.id} className={`hover:bg-gray-50 ${isOverdue(appointment.appointment_date) && appointment.status !== 'completed' && appointment.status !== 'cancelled' ? 'bg-red-50' : ''}`}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {new Date(appointment.appointment_date).toLocaleDateString()}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {new Date(appointment.appointment_date).toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{appointment.customer_name}</div>
-                      <div className="text-sm text-gray-500">
-                        {appointment.year} {appointment.make} {appointment.model}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 max-w-xs truncate">
-                      {appointment.description || 'No description'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {user?.role === 'admin' ? (
-                      <select
-                        value={appointment.status}
-                        onChange={(e) => updateAppointmentStatus(appointment.id, e.target.value as any)}
-                        className={`text-sm rounded-full px-3 py-1 font-medium border-0 ${getStatusColor(appointment.status)}`}
-                      >
-                        <option value="scheduled">Scheduled</option>
-                        <option value="confirmed">Confirmed</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    ) : (
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}>
-                        {appointment.status}
-                      </span>
-                    )}
-                  </td>
-                  {user?.role === 'admin' && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleEdit(appointment)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(appointment)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+      {/* List */}
+      {view === "list" && (
+        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date & Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer & Vehicle</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                  {user?.role === "admin" && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {filteredAppointments.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No appointments found</p>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {listSorted.map(a => (
+                  <tr key={a.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {new Date(a.appointment_date).toLocaleDateString()}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {new Date(a.appointment_date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{a.customer_name}</div>
+                      <div className="text-sm text-gray-500">{a.year} {a.make} {a.model} · {a.plate ?? a.license_plate ?? ""}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900 max-w-xs truncate">
+                        {a.description || "No description"}
+                      </div>
+                    </td>
+                    {user?.role === "admin" && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex gap-2">
+                          <button className="text-blue-600 hover:text-blue-900" onClick={()=>editApt(a)}>
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button className="text-red-600 hover:text-red-900" onClick={()=>delApt(a)}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <a
+                            className="text-gray-700 hover:text-gray-900"
+                            href={`${import.meta.env.VITE_API_BASE || "http://localhost:3001"}/api/appointments/${a.id}/ics`}
+                            title="Download .ics"
+                          >
+                            .ics
+                          </a>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {listSorted.length===0 && (
+            <div className="text-center py-12 text-gray-500">No appointments</div>
+          )}
         </div>
       )}
 
       {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-screen overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">
-              {editingAppointment ? 'Edit Appointment' : 'Schedule Appointment'}
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vehicle *
-                </label>
-                <select
-                  value={formData.vehicle_id}
-                  onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select a vehicle</option>
-                  {vehicles.map((vehicle) => (
-                    <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.customer_name} - {vehicle.year} {vehicle.make} {vehicle.model}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.appointment_date}
-                    onChange={(e) => setFormData({ ...formData, appointment_date: e.target.value })}
-                    required
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Time *
-                  </label>
-                  <input
-                    type="time"
-                    value={formData.appointment_time}
-                    onChange={(e) => setFormData({ ...formData, appointment_time: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration (hours)
-                </label>
-                <select
-                  value={formData.duration}
-                  onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="0.5">30 minutes</option>
-                  <option value="1">1 hour</option>
-                  <option value="2">2 hours</option>
-                  <option value="3">3 hours</option>
-                  <option value="4">4 hours</option>
-                  <option value="8">Full day</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                  placeholder="Brief description of the service needed..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"
-                >
-                  {editingAppointment ? 'Update' : 'Schedule'} Appointment
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditingAppointment(null);
-                    setFormData({
-                      vehicle_id: '',
-                      appointment_date: '',
-                      appointment_time: '',
-                      duration: '2',
-                      description: '',
-                      status: 'scheduled'
-                    });
-                  }}
-                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+            <h2 className="text-xl font-bold mb-4">{editTarget ? "Edit Appointment" : "New Appointment"}</h2>
+            <AppointmentForm
+              vehicles={vehicles}
+              customers={customers}
+              initial={{
+                plate: editTarget?.license_plate || "",   // IMPORTANT
+                date: presetDate || "",
+                time: presetTime || "09:00",
+                description: editTarget?.description || "",
+                customer_id: editTarget?.customer_id || "", // jääb samaks
+              }}
+              onSubmit={(data)=> editTarget ? saveEdit(data) : saveNew(data)}
+              onCancel={()=>{ setModalOpen(false); setEditTarget(null); }}
+            />
           </div>
         </div>
       )}

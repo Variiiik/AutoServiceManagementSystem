@@ -190,4 +190,24 @@ router.delete('/:id', [
   }
 });
 
+router.get('/find', async (req, res, next) => {
+  try {
+    const q = (req.query.plate || '').toString();
+    if (!q) return res.status(400).json({ error: 'plate required' });
+
+    // normaliseeri: eemalda tühikud/kriipsud, tee uppercase
+    const plate = q.replace(/\s|-/g, '').toUpperCase();
+
+    const sql = `
+      SELECT *
+      FROM vehicles
+      WHERE UPPER(REPLACE(COALESCE(plate, license_plate, ''), '-', '')) = $1
+      LIMIT 1;
+    `;
+    const { rows } = await pool.query(sql, [plate]);
+    if (!rows.length) return res.status(404).json({ error: 'not found' });
+    res.json(rows[0]);
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

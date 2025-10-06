@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Vehicle, Customer } from '../types';
 import { Plus, Search, CreditCard as Edit3, Trash2, Car } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { normalizePlate } from '../lib/api';
 
 export const VehiclesPage: React.FC = () => {
   const { user } = useAuth();
@@ -13,7 +14,14 @@ export const VehiclesPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    customer_id: string;
+    make: string;
+    model: string;
+    year: string;
+    license_plate: string;
+    vin: string;
+  }>({
     customer_id: '',
     make: '',
     model: '',
@@ -28,11 +36,11 @@ export const VehiclesPage: React.FC = () => {
 
   const fetchData = async () => {
     try {
+      setLoading(true);
       const [vehiclesResponse, customersResponse] = await Promise.all([
         vehiclesAPI.getAll(),
         customersAPI.getAll()
       ]);
-
       setVehicles(vehiclesResponse.data);
       setCustomers(customersResponse.data);
     } catch (error) {
@@ -45,12 +53,15 @@ export const VehiclesPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
+      // ÄRA PARSEINTI UUID-d! Jäta customer_id stringiks.
       const vehicleData = {
-        ...formData,
-        customer_id: parseInt(formData.customer_id),
-        year: formData.year ? parseInt(formData.year) : undefined
+        customer_id: formData.customer_id || null, // UUID string
+        make: formData.make?.trim(),
+        model: formData.model?.trim(),
+        year: formData.year ? parseInt(formData.year, 10) : null,
+        license_plate: normalizePlate(formData.license_plate || ''),
+        vin: formData.vin?.trim() || null,
       };
 
       if (editingVehicle) {
@@ -60,7 +71,7 @@ export const VehiclesPage: React.FC = () => {
         await vehiclesAPI.create(vehicleData);
         toast.success('Vehicle created successfully');
       }
-      
+
       setShowModal(false);
       setEditingVehicle(null);
       setFormData({
@@ -74,17 +85,17 @@ export const VehiclesPage: React.FC = () => {
       fetchData();
     } catch (error) {
       console.error('Error saving vehicle:', error);
-      toast.error('Failed to save vehicle');
+      toast.error((error as Error)?.message || 'Failed to save vehicle');
     }
   };
 
   const handleEdit = (vehicle: Vehicle) => {
     setEditingVehicle(vehicle);
     setFormData({
-      customer_id: vehicle.customer_id.toString(),
-      make: vehicle.make,
-      model: vehicle.model,
-      year: vehicle.year?.toString() || '',
+      customer_id: String(vehicle.customer_id || ''), // UUID jääb stringiks
+      make: vehicle.make || '',
+      model: vehicle.model || '',
+      year: vehicle.year ? String(vehicle.year) : '',
       license_plate: vehicle.license_plate || '',
       vin: vehicle.vin || ''
     });
@@ -106,11 +117,11 @@ export const VehiclesPage: React.FC = () => {
   };
 
   const filteredVehicles = vehicles.filter(vehicle =>
-    vehicle.make.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vehicle.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vehicle.license_plate?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vehicle.vin?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    vehicle.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
+    (vehicle.make || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (vehicle.model || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (vehicle.license_plate || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (vehicle.vin || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (vehicle.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
@@ -127,7 +138,7 @@ export const VehiclesPage: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-900">Vehicles</h1>
         {user?.role === 'admin' && (
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => { setShowModal(true); setEditingVehicle(null); }}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
           >
             <Plus className="h-4 w-4" />
@@ -176,7 +187,7 @@ export const VehiclesPage: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             <div className="space-y-2">
               <div>
                 <span className="text-sm font-medium text-gray-700">Owner: </span>
@@ -195,7 +206,7 @@ export const VehiclesPage: React.FC = () => {
                 </div>
               )}
             </div>
-            
+
             <div className="mt-4 pt-4 border-t border-gray-100">
               <p className="text-xs text-gray-500">
                 Added {new Date(vehicle.created_at || '').toLocaleDateString()}
@@ -218,7 +229,7 @@ export const VehiclesPage: React.FC = () => {
             <h2 className="text-xl font-bold mb-4">
               {editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
             </h2>
-            
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -232,13 +243,13 @@ export const VehiclesPage: React.FC = () => {
                 >
                   <option value="">Select a customer</option>
                   {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
+                    <option key={customer.id} value={String(customer.id)}>
                       {customer.name}
                     </option>
                   ))}
                 </select>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -252,7 +263,7 @@ export const VehiclesPage: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Model *
@@ -266,7 +277,7 @@ export const VehiclesPage: React.FC = () => {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Year
@@ -280,7 +291,7 @@ export const VehiclesPage: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   License Plate
@@ -288,11 +299,11 @@ export const VehiclesPage: React.FC = () => {
                 <input
                   type="text"
                   value={formData.license_plate}
-                  onChange={(e) => setFormData({ ...formData, license_plate: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, license_plate: normalizePlate(e.target.value) })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   VIN
@@ -304,7 +315,7 @@ export const VehiclesPage: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              
+
               <div className="flex space-x-3 pt-4">
                 <button
                   type="submit"

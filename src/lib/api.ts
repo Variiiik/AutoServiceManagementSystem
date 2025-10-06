@@ -105,5 +105,10 @@ export const dashboardAPI = {
   getTodayAppointments: () => api.get('/dashboard/today-appointments'),
   getLowStock: () => api.get('/dashboard/low-stock'),
 };
+// NormalizePlate
+export function normalizePlate(s: string | undefined | null): string {
+  if (!s) return '';
+  return s.replace(/[\s-]/g, '').toUpperCase();
+};
 
 export default api;
