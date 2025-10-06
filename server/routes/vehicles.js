@@ -2,8 +2,70 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const pool = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
+const { validate: isUuid } = require('uuid');
 
 const router = express.Router();
+
+/** Helperid: aktsepteeri kas UUID või legacy int ja tagasta tegelik UUID **/
+async function resolveVehicleUuid(idOrLegacy) {
+  const idStr = String(idOrLegacy).trim();
+  if (isUuid(idStr)) return idStr;
+
+  if (/^\d+$/.test(idStr)) {
+    const q = await pool.query(
+      'SELECT id FROM public.vehicles WHERE legacy_id = $1',
+      [Number(idStr)]
+    );
+    if (!q.rows[0]) {
+      const err = new Error(`Vehicle with legacy_id ${idStr} not found`);
+      err.status = 404;
+      throw err;
+    }
+    return q.rows[0].id; // UUID
+  }
+
+  const err = new Error('Invalid vehicle identifier: must be UUID or integer legacy_id');
+  err.status = 400;
+  throw err;
+}
+
+async function resolveCustomerUuid(idOrLegacy) {
+  const idStr = String(idOrLegacy).trim();
+  if (isUuid(idStr)) return idStr;
+
+  if (/^\d+$/.test(idStr)) {
+    const q = await pool.query(
+      'SELECT id FROM public.customers WHERE legacy_id = $1',
+      [Number(idStr)]
+    );
+    if (!q.rows[0]) {
+      const err = new Error(`Customer with legacy_id ${idStr} not found`);
+      err.status = 404;
+      throw err;
+    }
+    return q.rows[0].id; // UUID
+  }
+
+  const err = new Error('Invalid customer identifier: must be UUID or integer legacy_id');
+  err.status = 400;
+  throw err;
+}
+
+/** Custom validator: lubab uuid VÕI int (legacy) **/
+const uuidOrInt = (field) =>
+  body(field)
+    .custom((v) => typeof v === 'string' || typeof v === 'number')
+    .withMessage(`${field} required`)
+    .bail()
+    .custom((v) => {
+      const s = String(v).trim();
+      return isUuid(s) || /^\d+$/.test(s);
+    })
+    .withMessage(`${field} must be UUID or integer legacy_id`);
+
+const yearValidator = body('year').isInt({ min: 1900, max: new Date().getFullYear() + 1 });
+
+/* ========================= Routes ========================= */
 
 // Get all vehicles with customer info
 router.get('/', authenticateToken, async (req, res) => {
@@ -46,8 +108,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Create vehicle (admin only)
 router.post('/', [
   authenticateToken,
-  requireRole(['admin']),
-  body('customer_id').isInt({ min: 1 }),
+  body('customer_id'),
   body('make').notEmpty().trim(),
   body('model').notEmpty().trim(),
   body('year').isInt({ min: 1900, max: new Date().getFullYear() + 1 }),
@@ -77,7 +138,6 @@ router.post('/', [
 // Update vehicle (admin only)
 router.put('/:id', [
   authenticateToken,
-  requireRole(['admin']),
   body('customer_id').isInt({ min: 1 }),
   body('make').notEmpty().trim(),
   body('model').notEmpty().trim(),
@@ -113,7 +173,6 @@ router.put('/:id', [
 // Delete vehicle (admin only)
 router.delete('/:id', [
   authenticateToken,
-  requireRole(['admin'])
 ], async (req, res) => {
   try {
     const { id } = req.params;
