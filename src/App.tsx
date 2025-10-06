@@ -6,11 +6,12 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { VehiclesPage } from './pages/VehiclesPage';
-import { WorkOrders } from './components/WorkOrders';
+import { WorkOrders } from './pages/WorkOrders';
 import { InventoryPage } from './pages/InventoryPage';
 import { AppointmentsPage } from './pages/AppointmentsPage';
 import { BillingPage } from './pages/BillingPage';
 import { Layout } from './components/layout/Layout';
+import { SettingsPage } from './pages/SettingsPage';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
             <Route path="inventory" element={<InventoryPage />} />
             <Route path="appointments" element={<AppointmentsPage />} />
             <Route path="billing" element={<BillingPage />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>
       </Router>

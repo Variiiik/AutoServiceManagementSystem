@@ -1,3 +1,85 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 
+  🌗 Põhistiilid – light ja dark mode
+  ------------------------------------
+  - Ühtne taust/tekst toon kõikjal
+  - Mugavad default-id inputitele ja nuppudele
+  - Toaster, scrollbar ja transition klassid tume/heledale
+*/
+
+:root {
+  color-scheme: light dark;
+
+  /* Toaster värvid (kasutatakse main.tsx-s) */
+  --toast-bg: #363636;
+  --toast-text: #fff;
+}
+
+.dark {
+  --toast-bg: #1f2937;
+  --toast-text: #f3f4f6;
+}
+
+/* BODY */
+body {
+  @apply bg-gray-50 text-gray-900 transition-colors duration-300 ease-in-out;
+}
+
+.dark body {
+  @apply bg-gray-900 text-gray-100 transition-colors duration-300 ease-in-out;
+}
+
+/* LINKS */
+a {
+  @apply text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors;
+}
+
+/* BUTTONS */
+button {
+  @apply transition-colors duration-200;
+}
+
+/* INPUTS / SELECTS / TEXTAREAS */
+input,
+select,
+textarea {
+  @apply bg-white text-gray-900 border border-gray-300 rounded-lg 
+         focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+         placeholder-gray-400 outline-none;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  @apply bg-gray-800 text-gray-100 border-gray-700 placeholder-gray-500 
+         focus:ring-blue-500 focus:border-blue-500;
+}
+
+/* SCROLLBARS */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-400 dark:bg-gray-600 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500 dark:bg-gray-500;
+}
+
+/* CARDID JA CONTAINERID */
+.card {
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 
+         rounded-xl shadow-sm p-6 transition-colors;
+}
+
+/* HEADER & SIDEBAR ühtlane üleminek */
+header, nav, aside {
+  @apply transition-colors duration-300;
+}

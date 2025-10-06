@@ -74,6 +74,10 @@ export const workOrdersAPI = {
   delete: (id: number) => api.delete(`/work-orders/${id}`),
   getParts: (id: number) => api.get(`/work-orders/${id}/parts`),
   addPart: (id: number, data: any) => api.post(`/work-orders/${id}/parts`, data),
+  updatePart: (orderId: string, partId: string, data: { quantity_used?: number; unit_price?: number; cost_price?: number }) =>
+    api.patch(`/work-orders/${orderId}/parts/${partId}`, data),
+  deletePart: (orderId: string, partId: string) =>
+    api.delete(`/work-orders/${orderId}/parts/${partId}`),
 };
 
 // Inventory API
@@ -110,5 +114,8 @@ export function normalizePlate(s: string | undefined | null): string {
   if (!s) return '';
   return s.replace(/[\s-]/g, '').toUpperCase();
 };
+
+
+
 
 export default api;

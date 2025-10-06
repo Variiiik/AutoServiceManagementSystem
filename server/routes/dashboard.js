@@ -78,14 +78,14 @@ router.get('/recent-orders', authenticateToken, async (req, res) => {
       FROM work_orders wo
       LEFT JOIN customers c ON wo.customer_id = c.id
       LEFT JOIN vehicles v ON wo.vehicle_id = v.id
-      LEFT JOIN users u ON wo.assigned_mechanic = u.id
+      LEFT JOIN users u ON wo.assigned_to = u.id
     `;
     
     let params = [];
     
     // Mechanics can only see their assigned work orders
     if (req.user.role === 'mechanic') {
-      query += ' WHERE (wo.assigned_mechanic = $1 OR wo.assigned_mechanic IS NULL)';
+      query += ' WHERE (wo.assigned_to = $1 OR wo.assigned_to IS NULL)';
       params.push(req.user.id);
     }
     
@@ -110,7 +110,7 @@ router.get('/today-appointments', authenticateToken, async (req, res) => {
       FROM appointments a
       LEFT JOIN customers c ON a.customer_id = c.id
       LEFT JOIN vehicles v ON a.vehicle_id = v.id
-      LEFT JOIN users u ON a.assigned_mechanic = u.id
+      LEFT JOIN users u ON a.assigned_to = u.id
       WHERE DATE(a.appointment_date) = CURRENT_DATE
       ORDER BY a.appointment_date
     `);

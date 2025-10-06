@@ -5,6 +5,15 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import './index.css';
 
+// ✅ Kontrollime teema eelistust enne renderdamist (vältib vilkumist)
+const savedTheme = localStorage.getItem('theme');
+const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+  document.documentElement.classList.add('dark');
+} else {
+  document.documentElement.classList.remove('dark');
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -18,13 +27,15 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#363636',
-            color: '#fff',
+            background: 'var(--toast-bg, #363636)',
+            color: 'var(--toast-text, #fff)',
+            borderRadius: '8px',
+            padding: '10px 16px',
           },
         }}
       />
