@@ -12,7 +12,6 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
@@ -20,7 +19,16 @@ const api = axios.create({
   timeout: 20000,
 });
 
-// Attach Bearer token
+/** Soovi korral saad käsitsi seada/eemaldada Authorization päist */
+export function setAuthToken(token?: string) {
+  if (token) {
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
+  } else {
+    delete api.defaults.headers.common.Authorization;
+  }
+}
+
+// Attach Bearer token automaatselt iga päringu külge
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('auth_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -34,6 +42,8 @@ api.interceptors.response.use(
     if (err?.response?.status === 401) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('user_data');
+      // vajadusel eemalda ka instantsi päis
+      setAuthToken(undefined);
       window.location.href = '/login';
     }
     return Promise.reject(err);
@@ -43,9 +53,51 @@ api.interceptors.response.use(
 // -------- AUTH --------
 export const authAPI = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  register: (data: { email: string; password: string; fullName: string; role: string; phone?: string }) =>
+  register: (data: { email: string; password: string; fullName: string; role: 'admin' | 'mechanic'; phone?: string }) =>
     api.post('/auth/register', data),
   getCurrentUser: () => api.get('/auth/me'),
+  changePassword: (payload: { currentPassword: string; newPassword: string }) =>
+    api.post('/auth/change-password', payload).then(r => r.data),
+};
+
+// --- SELF / PROFILE ---
+export const meAPI = {
+  get: () => api.get('/users/me').then(r => r.data),
+  update: (payload: { fullName?: string; email?: string; phone?: string }) =>
+    api.put('/users/me', payload).then(r => r.data),
+};
+
+// --- USERS (admin) ---
+export type AppUser = {
+  id: string | number;
+  fullName: string;
+  email: string;
+  role: 'admin' | 'mechanic';
+  phone?: string;
+  isActive?: boolean;
+  createdAt?: string;
+};
+
+export const usersAPI = {
+  list: (q?: { search?: string; page?: number; limit?: number }) =>
+    api.get('/users', { params: q }).then(r => r.data as { items: AppUser[]; total: number }),
+  update: (id: string | number, payload: Partial<Pick<AppUser, 'fullName' | 'email' | 'role' | 'isActive' | 'phone'>>) =>
+    api.patch(`/users/${id}`, payload).then(r => r.data as AppUser),
+  resetPassword: (id: string | number) =>
+    api.post(`/users/${id}/reset-password`).then(r => r.data as { tempPassword?: string }),
+};
+
+// --- ROLES / PERMISSIONS (admin) ---
+export type Role = { id: string; name: string; description?: string };
+export type Permission = { key: string; label: string };
+
+export const rolesAPI = {
+  listRoles: () => api.get('/roles').then(r => r.data as Role[]),
+  listPermissions: () => api.get('/roles/permissions').then(r => r.data as Permission[]),
+  getRolePermissions: (roleId: string) =>
+    api.get(`/roles/${roleId}/permissions`).then(r => r.data as string[]), // array of keys
+  setRolePermissions: (roleId: string, keys: string[]) =>
+    api.put(`/roles/${roleId}/permissions`, { permissions: keys }).then(r => r.data),
 };
 
 // -------- CUSTOMERS --------
@@ -85,6 +137,8 @@ export const workOrdersAPI = {
   ) => api.patch(`/work-orders/${orderId}/parts/${partId}`, data),
   deletePart: (orderId: string | number, partId: string | number) =>
     api.delete(`/work-orders/${orderId}/parts/${partId}`),
+
+  /** Tööaja nupud: start, pause, resume, stop */
   timerAction: (id: string | number, action: 'start' | 'pause' | 'resume' | 'stop') =>
     api.patch(`/work-orders/${id}/timer`, { action }),
 };

@@ -229,14 +229,7 @@ export const LoginPage: React.FC = () => {
 
           {/* Toggle */}
           <div className="mt-6 text-center">
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium transition-colors"
-            >
-              {isLogin
-                ? "Don't have an account? Create one"
-                : 'Already have an account? Sign in'}
-            </button>
+
           </div>
         </div>
       </div>
