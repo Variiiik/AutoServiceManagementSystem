@@ -68,17 +68,7 @@ export const LoginPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Demo Credentials */}
-          {isLogin && (
-            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">Demo Credentials:</p>
-              <p className="text-sm text-blue-700 dark:text-blue-300">
-                <strong>Email:</strong> admin@autoservice.com<br />
-                <strong>Password:</strong> admin123
-              </p>
-            </div>
-          )}
-
+        
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {!isLogin && (

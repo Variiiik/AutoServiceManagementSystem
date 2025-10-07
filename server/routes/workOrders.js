@@ -408,5 +408,141 @@ router.delete('/:orderId/parts/:partId', authenticateToken, requireRole(['admin'
   }
 });
 
+async function _flushRunningTimer(client, orderId) {
+  const { rows } = await client.query(
+    `SELECT timer_started_at, timer_total_seconds
+     FROM work_orders
+     WHERE id = $1
+     FOR UPDATE`,
+     [orderId]
+  );
+
+  if (rows.length === 0) throw new Error('Work order not found');
+
+  const { timer_started_at, timer_total_seconds } = rows[0];
+  if (!timer_started_at) return timer_total_seconds;
+
+  const now = new Date();
+  const elapsed = Math.floor((now - new Date(timer_started_at)) / 1000); // sekundid
+  const newTotal = Math.max(0, (timer_total_seconds || 0) + elapsed);
+
+  await client.query(
+    `UPDATE work_orders
+     SET timer_started_at = NULL,
+         timer_total_seconds = $2
+     WHERE id = $1`,
+    [orderId, newTotal]
+  );
+
+  return newTotal;
+}
+
+/**
+ * PATCH /api/work-orders/:id/timer
+ * body: { action: 'start' | 'pause' | 'resume' | 'stop' }
+ */
+router.patch('/:id/timer', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { action } = req.body;
+
+  if (!['start','pause','resume','stop'].includes(action)) {
+    return res.status(400).json({ error: 'Invalid action' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Lukusta rida ja loe hetke olek
+    const r1 = await client.query(
+      `SELECT id, timer_started_at, timer_total_seconds, timer_paused
+       FROM work_orders
+       WHERE id = $1
+       FOR UPDATE`,
+      [id]
+    );
+    if (r1.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Work order not found' });
+    }
+    let { timer_started_at, timer_total_seconds, timer_paused } = r1.rows[0];
+
+    if (action === 'start') {
+      if (timer_started_at) {
+        // juba käib → no-op
+      } else {
+        await client.query(
+          `UPDATE work_orders
+           SET timer_started_at = NOW(),
+               timer_paused = FALSE
+           WHERE id = $1`,
+          [id]
+        );
+        timer_started_at = new Date();
+        timer_paused = false;
+      }
+    }
+    else if (action === 'pause') {
+      // akumuleeri senine, ja märgi paus
+      const newTotal = await _flushRunningTimer(client, id);
+      await client.query(
+        `UPDATE work_orders
+         SET timer_paused = TRUE
+         WHERE id = $1`,
+        [id]
+      );
+      timer_total_seconds = newTotal;
+      timer_paused = true;
+      timer_started_at = null;
+    }
+    else if (action === 'resume') {
+      // ainult siis, kui pausis ja ei jookse
+      if (!timer_started_at) {
+        await client.query(
+          `UPDATE work_orders
+           SET timer_started_at = NOW(),
+               timer_paused = FALSE
+           WHERE id = $1`,
+          [id]
+        );
+        timer_started_at = new Date();
+        timer_paused = false;
+      }
+    }
+    else if (action === 'stop') {
+      // akumuleeri ja nulli start
+      const newTotal = await _flushRunningTimer(client, id);
+      // optionaalne: tõsta labor_hours -> total_seconds/3600
+      await client.query(
+        `UPDATE work_orders
+         SET timer_paused = FALSE,
+             labor_hours = ROUND(($2::numeric / 3600.0)::numeric, 2)
+         WHERE id = $1`,
+        [id, newTotal]
+      );
+      timer_total_seconds = newTotal;
+      timer_paused = false;
+      timer_started_at = null;
+    }
+
+    await client.query('COMMIT');
+
+    // tagasta värske seis
+    const { rows: finalRows } = await pool.query(
+      `SELECT id, timer_started_at, timer_total_seconds, timer_paused, labor_hours
+       FROM work_orders
+       WHERE id = $1`,
+      [id]
+    );
+
+    res.json(finalRows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Timer action error:', err);
+    res.status(500).json({ error: 'Timer action failed' });
+  } finally {
+    client.release();
+  }
+});
 
 module.exports = router;

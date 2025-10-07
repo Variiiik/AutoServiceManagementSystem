@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-/** Sinakas klaas-stiilis kaart (sama mis Customers/Vehicles) */
+/** Blue glass card */
 const BlueCard: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ children, className = '' }) => (
   <div className="p-[1px] rounded-2xl bg-gradient-to-b from-blue-400/40 via-blue-500/20 to-blue-600/10 dark:from-blue-300/25 dark:via-blue-400/15 dark:to-blue-500/10">
     <div className={`rounded-2xl bg-white/90 dark:bg-slate-900/85 backdrop-blur supports-[backdrop-filter]:backdrop-blur ring-1 ring-slate-200/80 dark:ring-slate-700/70 shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 transition-all duration-200 ${className}`}>
@@ -16,6 +16,20 @@ const BlueCard: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ c
     </div>
   </div>
 );
+
+// format seconds to HH:MM:SS
+function formatDuration(sec: number) {
+  const s = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(ss)}`;
+}
+
+// EUR formatter
+const fmtEUR = (n: number) =>
+  new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' }).format(n ?? 0);
 
 export function WorkOrders() {
   const { user } = useAuth();
@@ -28,7 +42,8 @@ export function WorkOrders() {
 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
+  const [statusFilter, setStatusFilter] =
+    useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
 
   const [showModal, setShowModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -36,10 +51,6 @@ export function WorkOrders() {
 
   const [editingOrder, setEditingOrder] = useState<WorkOrder | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
-  const [editingPartId, setEditingPartId] = useState<string | null>(null);
-  const [editQty, setEditQty] = useState<string>('1');
-  const [editUnitPrice, setEditUnitPrice] = useState<string>('');
-  const [editCostPrice, setEditCostPrice] = useState<string>(''); // oma hind (valikuline)
 
   const [formData, setFormData] = useState({
     vehicle_id: '',
@@ -61,6 +72,13 @@ export function WorkOrders() {
     cost_price: '' // optional
   });
 
+  // global UI tick for live timers
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => { fetchData(); }, []);
   async function fetchData() {
     try {
@@ -73,7 +91,7 @@ export function WorkOrders() {
       setWorkOrders(ordersRes.data || []);
       setVehicles(vehiclesRes.data || []);
       setInventory(inventoryRes.data || []);
-      // mechanics võiks tulla usersAPI-st; praegu tühi nimekiri
+      // mechanics from users API in the future
       setMechanics([]);
     } catch (e) {
       console.error('Error fetching data:', e);
@@ -83,7 +101,7 @@ export function WorkOrders() {
     }
   }
 
-  async function fetchOrderParts(orderId: string) {
+  async function fetchOrderParts(orderId: string | number) {
     try {
       const res = await workOrdersAPI.getParts(orderId as any);
       setOrderParts(res.data || []);
@@ -142,7 +160,7 @@ export function WorkOrders() {
         customer_id: String(vehicles.find(v => String(v.id) === String(formData.vehicle_id))?.customer_id || ''),
         title: formData.title.trim(),
         description: formData.description || null,
-        assigned_to: formData.assigned_to || null,   // UUID või null
+        assigned_to: formData.assigned_to || null,
         labor_hours: formData.labor_hours ? parseFloat(formData.labor_hours) : 0,
         labor_rate: formData.labor_rate ? parseFloat(formData.labor_rate) : 0,
         status: formData.status || 'pending',
@@ -172,7 +190,7 @@ export function WorkOrders() {
       vehicle_id: String(order.vehicle_id ?? ''),
       title: order.title,
       description: order.description || '',
-      assigned_to: String((order as any).assigned_to ?? order.assigned_mechanic ?? ''),
+      assigned_to: '', // using assigned_to(UUID) if you wire mechanics list to UUIDs
       status: order.status as any,
       labor_hours: (order.labor_hours ?? 0).toString(),
       labor_rate: (order.labor_rate ?? 0).toString()
@@ -208,37 +226,42 @@ export function WorkOrders() {
     }
   }
 
-  // ADD PART (support inventory/custom + cost price)
+  // TIMER actions
+  async function timerAction(orderId: string | number, action: 'start'|'pause'|'resume'|'stop') {
+    try {
+      await workOrdersAPI.timerAction(orderId as any, action);
+      await fetchData();
+      if (action === 'stop') toast.success('Timer stopped & hours updated');
+    } catch (e) {
+      console.error('Timer action error:', e);
+      toast.error('Timer action failed');
+    }
+  }
+
+  // PARTS: add/update/delete
   async function handleAddPart(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedOrder) return;
 
     try {
       const selectedItem = inventory.find(i => String(i.id) === addPartForm.inventory_item_id);
-
-      const payload = {
-        is_custom: addPartForm.is_custom,
-        inventory_item_id: addPartForm.is_custom ? null : (addPartForm.inventory_item_id || null),
-        custom_name: addPartForm.is_custom ? (addPartForm.custom_name || '') : null,
-        custom_sku: addPartForm.is_custom ? (addPartForm.custom_sku || null) : null,
-        quantity_used: parseFloat(addPartForm.quantity_used || '0'),
-        unit_price: parseFloat(
-          addPartForm.unit_price ||
-          (selectedItem?.price != null ? String(selectedItem.price) : '0')
-        ),
-        cost_price: addPartForm.cost_price ? parseFloat(addPartForm.cost_price) : null
+      const payload: any = {
+        quantity_used: parseInt(addPartForm.quantity_used, 10),
       };
 
-      if (!payload.is_custom && !payload.inventory_item_id) {
-        toast.error('Select inventory item or switch to custom');
-        return;
-      }
-      if (payload.is_custom && !payload.custom_name) {
-        toast.error('Custom name is required');
-        return;
+      // either inventory reference OR custom fields
+      if (addPartForm.is_custom) {
+        payload.is_custom = true;
+        payload.custom_name = addPartForm.custom_name;
+        payload.custom_sku = addPartForm.custom_sku || null;
+        payload.unit_price = parseFloat(addPartForm.unit_price || '0');
+        if (addPartForm.cost_price) payload.cost_price = parseFloat(addPartForm.cost_price);
+      } else {
+        payload.inventory_item_id = addPartForm.inventory_item_id as any;
+        payload.unit_price = parseFloat(addPartForm.unit_price || selectedItem?.price?.toString() || '0');
       }
 
-      await workOrdersAPI.addPart(String(selectedOrder.id), payload);
+      await workOrdersAPI.addPart((selectedOrder.id as any), payload);
       toast.success('Part added');
 
       setShowAddPartModal(false);
@@ -251,47 +274,36 @@ export function WorkOrders() {
         unit_price: '',
         cost_price: ''
       });
-
-      await fetchOrderParts(String(selectedOrder.id));
-      await fetchData();
+      fetchOrderParts(selectedOrder.id as any);
+      fetchData();
     } catch (e) {
       console.error('Error adding part:', e);
       toast.error('Failed to add part');
     }
   }
 
-  async function savePartEdit(part: WorkOrderPart) {
-  if (!selectedOrder || !editingPartId) return;
-  try {
-    const payload: any = {};
-    if (editQty !== '') payload.quantity_used = parseInt(editQty, 10);
-    if (editUnitPrice !== '') payload.unit_price = parseFloat(editUnitPrice);
-    if (editCostPrice !== '') payload.cost_price = parseFloat(editCostPrice);
-
-    await workOrdersAPI.updatePart(String(selectedOrder.id), String(part.id), payload);
-    toast.success('Part updated');
-    setEditingPartId(null);
-    await fetchOrderParts(String(selectedOrder.id));
-    await fetchData();
-  } catch (e) {
-    console.error(e);
-    toast.error('Failed to update part');
+  async function updatePartQty(orderId: string | number, part: WorkOrderPart, newQty: number) {
+    try {
+      await workOrdersAPI.updatePart(String(orderId), String(part.id), { quantity_used: newQty });
+      fetchOrderParts(orderId);
+      fetchData();
+    } catch (e) {
+      console.error('Error updating part qty:', e);
+      toast.error('Failed to update qty');
+    }
   }
-}
 
-async function deletePart(part: WorkOrderPart) {
-  if (!selectedOrder) return;
-  if (!window.confirm('Delete this part?')) return;
-  try {
-    await workOrdersAPI.deletePart(String(selectedOrder.id), String(part.id));
-    toast.success('Part deleted');
-    await fetchOrderParts(String(selectedOrder.id));
-    await fetchData();
-  } catch (e) {
-    console.error(e);
-    toast.error('Failed to delete part');
+  async function deletePart(orderId: string | number, part: WorkOrderPart) {
+    if (!window.confirm('Delete this part?')) return;
+    try {
+      await workOrdersAPI.deletePart(String(orderId), String(part.id));
+      fetchOrderParts(orderId);
+      fetchData();
+    } catch (e) {
+      console.error('Error deleting part:', e);
+      toast.error('Failed to delete part');
+    }
   }
-}
 
   if (loading) {
     return (
@@ -301,7 +313,7 @@ async function deletePart(part: WorkOrderPart) {
     );
   }
 
-  // Väike kokkuvõtte riba
+  // Summary pills
   const totalCount = filteredOrders.length;
   const pendingCount = filteredOrders.filter(o => o.status === 'pending').length;
   const inProgressCount = filteredOrders.filter(o => o.status === 'in_progress').length;
@@ -369,6 +381,7 @@ async function deletePart(part: WorkOrderPart) {
                 <th className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-100">Work Order</th>
                 <th className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-100">Customer & Vehicle</th>
                 <th className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-100">Status</th>
+                <th className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-100">Timer</th>
                 <th className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-100">Assigned</th>
                 <th className="px-4 py-3 font-semibold text-gray-800 dark:text-gray-100">Total</th>
                 <th className="px-4 py-3"></th>
@@ -408,11 +421,80 @@ async function deletePart(part: WorkOrderPart) {
                       </div>
                     )}
                   </td>
+
+                  {/* TIMER cell */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {(() => {
+                      const running = !!(order as any).timer_started_at && !(order as any).timer_paused;
+                      const base = (order as any).timer_total_seconds || 0;
+                      const liveSeconds = running
+                        ? base + Math.floor((Date.now() - new Date((order as any).timer_started_at).getTime()) / 1000)
+                        : base;
+
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">{formatDuration(liveSeconds)}</span>
+                          {canEditOrder(order) && (
+                            <div className="flex items-center gap-1">
+                              {!((order as any).timer_started_at) && !((order as any).timer_paused) && (
+                                <button
+                                  className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
+                                  onClick={() => timerAction(order.id as any, 'start')}
+                                  title="Start"
+                                >
+                                  Start
+                                </button>
+                              )}
+
+                              {(order as any).timer_started_at && !((order as any).timer_paused) && (
+                                <>
+                                  <button
+                                    className="px-2 py-1 text-xs rounded bg-amber-600 text-white hover:bg-amber-700"
+                                    onClick={() => timerAction(order.id as any, 'pause')}
+                                    title="Pause"
+                                  >
+                                    Pause
+                                  </button>
+                                  <button
+                                    className="px-2 py-1 text-xs rounded bg-slate-600 text-white hover:bg-slate-700"
+                                    onClick={() => timerAction(order.id as any, 'stop')}
+                                    title="Stop & set hours"
+                                  >
+                                    Stop
+                                  </button>
+                                </>
+                              )}
+
+                              {!((order as any).timer_started_at) && ((order as any).timer_paused) && (
+                                <>
+                                  <button
+                                    className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+                                    onClick={() => timerAction(order.id as any, 'resume')}
+                                    title="Resume"
+                                  >
+                                    Resume
+                                  </button>
+                                  <button
+                                    className="px-2 py-1 text-xs rounded bg-slate-600 text-white hover:bg-slate-700"
+                                    onClick={() => timerAction(order.id as any, 'stop')}
+                                    title="Stop & set hours"
+                                  >
+                                    Stop
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
+
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                     {order.mechanic_name || 'Unassigned'}
                   </td>
                   <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">
-                    {typeof order.total_amount === 'number' ? `${order.total_amount.toFixed(2)} EUR` : '—'}
+                    {typeof order.total_amount === 'number' ? fmtEUR(order.total_amount) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 justify-end">
@@ -446,7 +528,7 @@ async function deletePart(part: WorkOrderPart) {
                 </tr>
               ))}
               {filteredOrders.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-500 dark:text-gray-400">No work orders found</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-500 dark:text-gray-400">No work orders found</td></tr>
               )}
             </tbody>
           </table>
@@ -537,7 +619,7 @@ async function deletePart(part: WorkOrderPart) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Labor Rate (EUR)</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Labor Rate (€/h)</label>
                       <input
                         type="number" step="0.01" min="0"
                         value={formData.labor_rate}
@@ -628,7 +710,77 @@ async function deletePart(part: WorkOrderPart) {
                     <div>
                       <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Totals</h3>
                       <p className="text-sm text-gray-900 dark:text-gray-100 font-semibold">
-                        {typeof selectedOrder.total_amount === 'number' ? `${selectedOrder.total_amount.toFixed(2)} EUR` : '—'}
+                        {typeof selectedOrder.total_amount === 'number' ? fmtEUR(selectedOrder.total_amount) : '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Timer block in details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Timer</h3>
+                      {(() => {
+                        const running = !!(selectedOrder as any).timer_started_at && !(selectedOrder as any).timer_paused;
+                        const base = (selectedOrder as any).timer_total_seconds || 0;
+                        const liveSeconds = running
+                          ? base + Math.floor((Date.now() - new Date((selectedOrder as any).timer_started_at).getTime()) / 1000)
+                          : base;
+
+                        return (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="font-mono text-sm">{formatDuration(liveSeconds)}</span>
+                            {canEditOrder(selectedOrder) && selectedOrder.status !== 'completed' && (
+                              <div className="flex items-center gap-1">
+                                {!((selectedOrder as any).timer_started_at) && !((selectedOrder as any).timer_paused) && (
+                                  <button
+                                    className="px-2 py-1 text-xs rounded bg-green-600 text-white hover:bg-green-700"
+                                    onClick={() => timerAction(selectedOrder.id as any, 'start')}
+                                  >
+                                    Start
+                                  </button>
+                                )}
+                                {(selectedOrder as any).timer_started_at && !((selectedOrder as any).timer_paused) && (
+                                  <>
+                                    <button
+                                      className="px-2 py-1 text-xs rounded bg-amber-600 text-white hover:bg-amber-700"
+                                      onClick={() => timerAction(selectedOrder.id as any, 'pause')}
+                                    >
+                                      Pause
+                                    </button>
+                                    <button
+                                      className="px-2 py-1 text-xs rounded bg-slate-600 text-white hover:bg-slate-700"
+                                      onClick={() => timerAction(selectedOrder.id as any, 'stop')}
+                                    >
+                                      Stop
+                                    </button>
+                                  </>
+                                )}
+                                {!((selectedOrder as any).timer_started_at) && ((selectedOrder as any).timer_paused) && (
+                                  <>
+                                    <button
+                                      className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+                                      onClick={() => timerAction(selectedOrder.id as any, 'resume')}
+                                    >
+                                      Resume
+                                    </button>
+                                    <button
+                                      className="px-2 py-1 text-xs rounded bg-slate-600 text-white hover:bg-slate-700"
+                                      onClick={() => timerAction(selectedOrder.id as any, 'stop')}
+                                    >
+                                      Stop
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Labor</h3>
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {selectedOrder.labor_hours ?? 0} h @ {fmtEUR(selectedOrder.labor_rate ?? 0)}/h
                       </p>
                     </div>
                   </div>
@@ -647,112 +799,53 @@ async function deletePart(part: WorkOrderPart) {
                               <th className="px-4 py-2 text-left font-semibold text-gray-800 dark:text-gray-100">Qty</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-800 dark:text-gray-100">Unit Price</th>
                               <th className="px-4 py-2 text-left font-semibold text-gray-800 dark:text-gray-100">Total</th>
+                              {canEditOrder(selectedOrder) && selectedOrder.status !== 'completed' && (
+                                <th className="px-4 py-2"></th>
+                              )}
                             </tr>
                           </thead>
-                            <tbody>
-                              {orderParts.map((p) => {
-                                const isEditing = editingPartId === String(p.id);
-                                return (
-                                  <tr key={String(p.id)} className="border-b border-gray-200 dark:border-gray-800">
-                                    <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
-                                      {(p as any).name || (p as any).custom_name || 'Part'}
-                                      {(p as any).custom_sku ? <span className="ml-2 text-xs text-gray-500">({(p as any).custom_sku})</span> : null}
+                          <tbody>
+                            {orderParts.map((p) => {
+                              const total = (p.quantity_used * Number(p.unit_price || 0));
+                              return (
+                                <tr key={p.id as any} className="border-b border-gray-200 dark:border-gray-800">
+                                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{(p as any).name || 'Part'}</td>
+                                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
+                                    {canEditOrder(selectedOrder) && selectedOrder.status !== 'completed' ? (
+                                      <div className="inline-flex items-center gap-2">
+                                        <button
+                                          className="w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                                          onClick={() => updatePartQty(selectedOrder.id as any, p, Math.max(1, p.quantity_used - 1))}
+                                          title="Decrease"
+                                        >-</button>
+                                        <span className="min-w-[2ch] text-center">{p.quantity_used}</span>
+                                        <button
+                                          className="w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                                          onClick={() => updatePartQty(selectedOrder.id as any, p, p.quantity_used + 1)}
+                                          title="Increase"
+                                        >+</button>
+                                      </div>
+                                    ) : (
+                                      <span>{p.quantity_used}</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{fmtEUR(Number(p.unit_price || 0))}</td>
+                                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100 font-medium">{fmtEUR(total)}</td>
+                                  {canEditOrder(selectedOrder) && selectedOrder.status !== 'completed' && (
+                                    <td className="px-4 py-2">
+                                      <button
+                                        className="text-red-600 hover:text-red-800"
+                                        onClick={() => deletePart(selectedOrder.id as any, p)}
+                                        title="Delete part"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
                                     </td>
-
-                                    {/* Qty */}
-                                    <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
-                                      {isEditing ? (
-                                        <input
-                                          type="number"
-                                          min="1"
-                                          value={editQty}
-                                          onChange={(e) => setEditQty(e.target.value)}
-                                          className="w-20 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                                        />
-                                      ) : (
-                                        p.quantity_used
-                                      )}
-                                    </td>
-
-                                    {/* Unit price */}
-                                    <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
-                                      {isEditing ? (
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
-                                          value={editUnitPrice}
-                                          onChange={(e) => setEditUnitPrice(e.target.value)}
-                                          className="w-24 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                                        />
-                                      ) : (
-                                        `${Number(p.unit_price).toFixed(2)} EUR`
-                                      )}
-                                    </td>
-
-                                    {/* Total */}
-                                    <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
-                                      {(p.quantity_used * Number(p.unit_price)).toFixed(2)} EUR
-                                    </td>
-
-                                    {/* Actions + (valikuline) oma hind */}
-                                    <td className="px-4 py-2 text-right whitespace-nowrap">
-                                      {isEditing ? (
-                                        <div className="flex items-center gap-2 justify-end">
-                                          {/* (valikuline) oma hind sisestus */}
-                                          <input
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            placeholder="Cost"
-                                            value={editCostPrice}
-                                            onChange={(e) => setEditCostPrice(e.target.value)}
-                                            className="w-24 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
-                                            title="Own cost (optional)"
-                                          />
-                                          <button
-                                            onClick={() => savePartEdit(p)}
-                                            className="px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm"
-                                          >
-                                            Save
-                                          </button>
-                                          <button
-                                            onClick={() => setEditingPartId(null)}
-                                            className="px-3 py-1 rounded-md bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-700 text-sm"
-                                          >
-                                            Cancel
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-2 justify-end">
-                                          {canEditOrder(selectedOrder!) && selectedOrder!.status !== 'completed' && (
-                                            <>
-                                              <button
-                                                onClick={() => {
-                                                  setEditingPartId(String(p.id));
-                                                  setEditQty(String(p.quantity_used));
-                                                  setEditUnitPrice(String(p.unit_price));
-                                                  setEditCostPrice((p as any).cost_price != null ? String((p as any).cost_price) : '');
-                                                }}
-                                                className="px-3 py-1 rounded-md bg-yellow-100 text-yellow-800 hover:bg-yellow-200 text-sm"
-                                              >
-                                                Edit
-                                              </button>
-                                              <button
-                                                onClick={() => deletePart(p)}
-                                                className="px-3 py-1 rounded-md bg-red-100 text-red-700 hover:bg-red-200 text-sm"
-                                              >
-                                                Delete
-                                              </button>
-                                            </>
-                                          )}
-                                        </div>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
                         </table>
                       </div>
                     )}
@@ -812,54 +905,38 @@ async function deletePart(part: WorkOrderPart) {
                 </div>
 
                 <form onSubmit={handleAddPart} className="space-y-4">
-                  {/* Custom toggle */}
                   <div className="flex items-center gap-2">
                     <input
                       id="is_custom"
                       type="checkbox"
-                      checked={addPartForm.is_custom}
-                      onChange={(e) =>
-                        setAddPartForm(f => ({
-                          ...f,
-                          is_custom: e.target.checked,
-                          // reset teisele režiimile minnes
-                          inventory_item_id: '',
-                          unit_price: '',
-                          custom_name: '',
-                          custom_sku: ''
-                        }))
-                      }
                       className="h-4 w-4"
+                      checked={addPartForm.is_custom}
+                      onChange={(e) => setAddPartForm(f => ({ ...f, is_custom: e.target.checked }))}
                     />
-                    <label htmlFor="is_custom" className="text-sm text-gray-700 dark:text-gray-300">
-                      Custom part
-                    </label>
+                    <label htmlFor="is_custom" className="text-sm text-gray-700 dark:text-gray-300">Custom part</label>
                   </div>
 
-                  {/* inventory / custom fields */}
                   {!addPartForm.is_custom ? (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Part *
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Part *</label>
                       <select
                         value={addPartForm.inventory_item_id}
                         onChange={(e) => {
                           const v = e.target.value;
                           const sel = inventory.find(i => String(i.id) === v);
-                          setAddPartForm(f => ({
-                            ...f,
+                          setAddPartForm({
+                            ...addPartForm,
                             inventory_item_id: v,
-                            unit_price: sel?.price != null ? String(sel.price) : f.unit_price
-                          }));
+                            unit_price: sel?.price != null ? String(sel.price) : ''
+                          });
                         }}
                         required
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="">Select a part</option>
                         {inventory.filter(i => (i as any).stock_quantity > 0).map(item => (
-                          <option key={String(item.id)} value={String(item.id)}>
-                            {item.name} — {(item.price ?? 0).toFixed(2)} EUR ({(item as any).stock_quantity} in stock)
+                          <option key={item.id as any} value={String(item.id)}>
+                            {item.name} — {fmtEUR(item.price ?? 0)} ({(item as any).stock_quantity} in stock)
                           </option>
                         ))}
                       </select>
@@ -867,28 +944,22 @@ async function deletePart(part: WorkOrderPart) {
                   ) : (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Custom name *
-                        </label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
                         <input
                           type="text"
                           value={addPartForm.custom_name}
-                          onChange={(e)=> setAddPartForm(f => ({ ...f, custom_name: e.target.value }))}
+                          onChange={(e) => setAddPartForm(f => ({ ...f, custom_name: e.target.value }))}
                           required
                           className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-                          placeholder="e.g. Special bracket"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Custom SKU
-                        </label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">SKU</label>
                         <input
                           type="text"
                           value={addPartForm.custom_sku}
-                          onChange={(e)=> setAddPartForm(f => ({ ...f, custom_sku: e.target.value }))}
+                          onChange={(e) => setAddPartForm(f => ({ ...f, custom_sku: e.target.value }))}
                           className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-                          placeholder="e.g. BRKT-001"
                         />
                       </div>
                     </>
@@ -896,11 +967,9 @@ async function deletePart(part: WorkOrderPart) {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Quantity *
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity *</label>
                       <input
-                        type="number" min="0.01" step="0.01"
+                        type="number" min="1"
                         value={addPartForm.quantity_used}
                         onChange={(e) => setAddPartForm({ ...addPartForm, quantity_used: e.target.value })}
                         required
@@ -908,32 +977,27 @@ async function deletePart(part: WorkOrderPart) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Client price (unit) *
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Unit Price (EUR)</label>
                       <input
                         type="number" step="0.01" min="0"
                         value={addPartForm.unit_price}
                         onChange={(e) => setAddPartForm({ ...addPartForm, unit_price: e.target.value })}
-                        required
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g. 39.90"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Cost price (unit)
-                    </label>
-                    <input
-                      type="number" step="0.01" min="0"
-                      value={addPartForm.cost_price}
-                      onChange={(e) => setAddPartForm({ ...addPartForm, cost_price: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-                      placeholder="optional"
-                    />
-                  </div>
+                  {addPartForm.is_custom && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cost Price (EUR)</label>
+                      <input
+                        type="number" step="0.01" min="0"
+                        value={addPartForm.cost_price}
+                        onChange={(e) => setAddPartForm({ ...addPartForm, cost_price: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  )}
 
                   <div className="flex gap-3 pt-2">
                     <button type="submit" className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 shadow-md shadow-green-500/20">

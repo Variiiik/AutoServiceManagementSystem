@@ -7,47 +7,55 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProd = process.env.NODE_ENV === 'production';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
-// Test database connection on startup
+// DB test
 const pool = require('./config/database');
-
 async function testDatabaseConnection() {
   try {
-    const result = await pool.query('SELECT NOW()');
+    await pool.query('SELECT 1');
     console.log('✅ Database connected successfully');
-    return true;
-  } catch (error) {
-    console.error('❌ Database connection failed:', error.message);
-    return false;
+  } catch (e) {
+    console.error('❌ Database connection failed:', e.message);
   }
 }
 
-// Security middleware
-app.use(helmet());
+// CF / reverse proxy taga:
+app.set('trust proxy', 1);
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
+// Helmet + CSP (prod-is range, dev-is lõdvem)
+app.use(helmet({
+  contentSecurityPolicy: isProd ? {
+    useDefaults: true,
+    directives: {
+      "default-src": ["'self'"],
+      "connect-src": ["'self'"], // fetch/XHR samalt domeenilt
+      "img-src": ["'self'", "data:", "blob:"],
+      "font-src": ["'self'", "data:"],
+      "style-src": ["'self'", "'unsafe-inline'"], // tailwind/dev
+      "script-src": ["'self'"],
+      "frame-ancestors": ["'self'"],
+      "base-uri": ["'self'"],
+      "form-action": ["'self'"]
+    }
+  } : false,
+  crossOriginEmbedderPolicy: false
+}));
 
-// CORS configuration
+// Rate limit
+app.use(rateLimit({ windowMs: 15*60*1000, max: 100 }));
+
+// CORS – prodis same-origin, devis lubame Vite
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://192.168.2.10:5173',
-    'http://192.168.2.10:3081',
-    'http://localhost:3081',
-    'http://localhost:5173'
-  ],
+  origin: isProd ? FRONTEND_URL : [FRONTEND_URL, 'http://localhost:5173'],
   credentials: true
 }));
 
-// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Routes
+// API routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/vehicles', require('./routes/vehicles'));
@@ -56,71 +64,27 @@ app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/appointments', require('./routes/appointments'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    database: 'connected'
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+// STATIC frontend (build kaust)
+if (isProd) {
+  const distDir = path.join(__dirname, '..', 'dist'); // kuna sul front on juures, mitte /client
+  app.use(express.static(distDir));
+
+  // SPA fallback
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) return next();
+    res.sendFile(path.join(distDir, 'index.html'));
   });
-});
+}
 
-// Test database endpoint
-app.get('/api/test-db', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT NOW() as current_time');
-    res.json({ 
-      status: 'Database OK', 
-      timestamp: result.rows[0].current_time 
-    });
-  } catch (error) {
-    console.error('Database test error:', error);
-    res.status(500).json({ 
-      error: 'Database connection failed',
-      details: error.message 
-    });
-  }
-});
-
-// Error handling middleware
+// errors
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    ...(process.env.NODE_ENV === 'development' && { 
-      details: err.message,
-      stack: err.stack 
-    })
-  });
+  console.error(err);
+  res.status(500).json({ error: 'Server error' });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
-
-// Start server
 app.listen(PORT, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://192.168.2.10:3081'}`);
-  
-  // Test database connection
-  const dbConnected = await testDatabaseConnection();
-  if (!dbConnected) {
-    console.log('⚠️  Server started but database connection failed');
-    console.log('💡 Make sure PostgreSQL is running and DATABASE_URL is correct');
-  }
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  process.exit(0);
+  console.log(`🚀 API+Frontend on :${PORT}`);
+  await testDatabaseConnection();
 });

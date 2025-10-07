@@ -77,7 +77,7 @@ export interface WorkOrder {
 // ---------- Inventory ----------
 export interface InventoryItem {
   // Kui inventory.id on INT → number; kui UUID → muuda stringiks.
-  id: number | string;
+  id: string;
   name: string;
   sku: string;
   stock_quantity: number;
